@@ -1,0 +1,52 @@
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* Main chart takes 2/3rds of space */
+  gap: 24px;
+}
+
+/* Ensure ResponsiveContainer has a height to fill */
+.chart-container {
+  height: 340px;
+  width: 100%;
+  padding: 24px;
+}
+
+@media (max-width: 1100px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Custom Tooltip Styling for Recharts */
+.custom-tooltip {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--slate-200);
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(4px);
+}
+
+.tooltip-label {
+  font-weight: 700;
+  color: var(--slate-900);
+  margin-bottom: 8px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 4px;
+}
+
+.tooltip-data {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tooltip-name {
+  color: var(--slate-600);
+  font-weight: 500;
+  text-transform: capitalize;
+}

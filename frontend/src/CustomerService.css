@@ -1,0 +1,197 @@
+/* Inherits root variables from Dashboard.css */
+
+.fw-cs-full-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Mini KPI Adjustment */
+.fw-kpi-card.mini {
+  padding: 20px 24px;
+  margin-bottom: 0;
+}
+.fw-kpi-card.mini .kpi-value {
+  margin-bottom: 0;
+}
+
+/* Mini Button for Table */
+.fw-btn-outline.mini-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+/* --- FLOATING CHAT WIDGET --- */
+.fw-chat-popup {
+  position: fixed;
+  bottom: 24px;
+  right: 32px;
+  width: 400px;
+  height: 550px; 
+  background: white;
+  border: 1px solid var(--slate-200);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0,0,0,0.02);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+/* Chat Animation */
+.slide-up-chat {
+  animation: slideUpPopup 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom right;
+}
+
+@keyframes slideUpPopup {
+  from { opacity: 0; transform: translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Header */
+.chat-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-title-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.status-dot.online { background-color: var(--emerald-600); box-shadow: 0 0 0 2px var(--emerald-100); }
+
+.chat-title-info h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--slate-900);
+  line-height: 1.2;
+}
+
+.ticket-id {
+  font-size: 10px;
+  color: var(--slate-600);
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.chat-header-actions .fw-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.close-btn:hover { background: var(--red-100); color: var(--red-600); }
+
+/* Viewport */
+.chat-viewport {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: white;
+}
+
+.chat-row { display: flex; width: 100%; }
+.chat-row.inbound { justify-content: flex-start; }
+.chat-row.outbound { justify-content: flex-end; }
+
+.chat-bubble {
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bubble-meta { display: baseline; gap: 8px; }
+.chat-row.outbound .bubble-meta { flex-direction: row-reverse; }
+
+.bubble-meta .sender { font-size: 11px; font-weight: 600; color: var(--slate-600); }
+.bubble-meta .time { font-size: 10px; color: var(--slate-400); }
+
+.bubble-text {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 8px;
+}
+
+.chat-row.inbound .bubble-text {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  border: 1px solid var(--slate-200);
+  border-bottom-left-radius: 2px;
+}
+
+.chat-row.outbound .bubble-text {
+  background: var(--blue-600);
+  color: white;
+  border-bottom-right-radius: 2px;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+}
+
+/* Composer / Input Area */
+.chat-composer {
+  padding: 16px;
+  border-top: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  display: flex;
+  gap: 12px;
+}
+
+.chat-composer input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.chat-composer input:focus {
+  border-color: var(--blue-600);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.chat-composer button {
+  padding: 0 20px;
+}
+
+/* NEW: UNREAD INDICATORS */
+.unread-counter {
+  background: var(--red-600);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+}
+
+.urgent-btn {
+  border-color: var(--blue-600) !important;
+  color: var(--blue-600) !important;
+  background: var(--blue-50) !important;
+  font-weight: 700;
+}

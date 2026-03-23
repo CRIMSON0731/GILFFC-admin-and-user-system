@@ -1,0 +1,324 @@
+/* Inherits root variables from Dashboard.css */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 40px;
+  max-width: 1200px;
+  margin-top: 10px;
+}
+
+/* --- CLICKABLE PROFILE HOVER --- */
+.hover-pointer {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+.hover-pointer:hover {
+  background-color: var(--slate-100);
+}
+
+/* --- SYSTEM ALERTS --- */
+.sys-alert {
+  padding: 12px 20px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1200px;
+}
+.sys-alert-success {
+  background-color: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.sys-alert-error {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+/* --- SETTINGS SIDEBAR (Sub-Nav) --- */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-tab {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: 0.2s;
+  font-family: inherit;
+}
+
+.settings-tab:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+}
+
+.settings-tab.active {
+  background: var(--blue-50);
+  color: var(--blue-700);
+  font-weight: 600;
+}
+
+/* --- SYSTEM STATUS WIDGET --- */
+.security-status-widget {
+  background: white;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.widget-title {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--slate-500);
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.widget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--slate-700);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+/* --- SETTINGS CARDS --- */
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-card {
+  background: white;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.card-header.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--slate-900);
+  margin-bottom: 6px;
+}
+
+.card-header p {
+  font-size: 13px;
+  color: var(--slate-500);
+}
+
+.card-body {
+  padding: 28px;
+}
+.card-body.p-0 {
+  padding: 0;
+}
+
+.card-footer {
+  padding: 16px 28px;
+  background: #f8fafc;
+  border-top: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* --- PROFILE ELEMENTS --- */
+.profile-upload-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.large-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px var(--slate-200);
+  object-fit: cover;
+}
+
+.upload-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mt-4 { margin-top: 24px; }
+.ml-4 { margin-left: 16px; }
+
+.disabled-input {
+  background: var(--slate-100) !important;
+  color: var(--slate-500) !important;
+  cursor: not-allowed;
+  font-family: monospace;
+}
+
+/* --- TEAM TABLE --- */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+.user-cell img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.user-cell div {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- DANGER ZONE --- */
+.danger-zone {
+  border-color: #fecaca;
+}
+.danger-zone .card-header {
+  background: #fff5f5;
+  border-bottom-color: #fecaca;
+}
+.text-danger { color: var(--red-600) !important; }
+
+.danger-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.danger-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+}
+
+.danger-row strong { font-size: 15px; color: var(--slate-900); display: block; margin-bottom: 4px;}
+.danger-row p { font-size: 13px; color: var(--slate-600); margin: 0; }
+
+.danger-divider {
+  height: 1px;
+  background: var(--slate-200);
+  width: 100%;
+}
+
+.danger-outline {
+  border-color: var(--red-600);
+  color: var(--red-600);
+  background: white;
+}
+.danger-outline:hover {
+  background: #fef2f2;
+  border-color: var(--red-600);
+}
+
+.danger-solid {
+  background: var(--red-600);
+}
+.danger-solid:hover {
+  background: #b91c1c;
+}
+
+/* --- PROFILE DROPDOWN MENU --- */
+.profile-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  background: white;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+  animation: slideDownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownFade {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.profile-dropdown-menu .dropdown-header {
+  padding: 16px;
+  background: var(--slate-50);
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-dropdown-menu .dropdown-header strong {
+  font-size: 14px;
+  color: var(--slate-900);
+}
+
+.profile-dropdown-menu .dropdown-header span {
+  font-size: 12px;
+  color: var(--slate-500);
+  margin-top: 2px;
+}
+
+.profile-dropdown-menu .dropdown-divider {
+  height: 1px;
+  background: var(--slate-200);
+  width: 100%;
+}
+
+.profile-dropdown-menu button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-700);
+  cursor: pointer;
+  transition: 0.15s;
+  font-family: inherit;
+}
+
+.profile-dropdown-menu button:hover {
+  background: var(--slate-100);
+  color: var(--blue-600);
+}
+
+.profile-dropdown-menu button.text-danger:hover {
+  background: #fef2f2;
+  color: var(--red-600);
+}
