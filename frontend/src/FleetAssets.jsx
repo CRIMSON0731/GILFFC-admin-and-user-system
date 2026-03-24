@@ -11,34 +11,37 @@ const ROUTE_COLORS = [
   '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'
 ];
 
-// ─── Regional Traffic Intelligence Engine ─────────────────────────────────────
-const calculateTrafficImpact = (address) => {
-  const adr = address?.toLowerCase() || '';
-  let multiplier = 1.0;
+// ─── Digital Twin Anticipation Engine (Synced with Dashboard V3.0) ────────────
+const runDigitalTwinMultiplier = (address, itemDescription) => {
+  let multipliers = { weather: 1.0, traffic: 1.0, event: 1.0, port: 1.0 };
+  const adr = (address || '').toLowerCase();
+  const items = (itemDescription || '').toLowerCase();
 
-  if (adr.includes('edsa') || adr.includes('c-5') || adr.includes('commonwealth') || adr.includes('mcarthur')) {
-    multiplier = 2.5;
-  } else if (adr.includes('nlex') || adr.includes('slex') || adr.includes('aguinaldo') || adr.includes('cavite')) {
-    multiplier = 1.5;
-  } else if (adr.includes('marilaque') || adr.includes('halsema') || adr.includes('ilocos')) {
-    multiplier = 0.9;
+  // 1. Hyper-Local Weather (Flood Buffer)
+  if (adr.includes('espana') || adr.includes('taft') || adr.includes('marikina')) {
+    multipliers.weather = 1.35;
   }
 
-  if (adr.includes('cebu') || adr.includes('cscr') || adr.includes('bacalso')) {
-    multiplier = 2.0; 
-  } else if (adr.includes('bacolod') || adr.includes('panay') || adr.includes('iloilo')) {
-    multiplier = 1.4;
+  // 2. Real-Time Traffic Layers
+  const currentHour = new Date().getHours();
+  if ((currentHour >= 7 && currentHour <= 10) || (currentHour >= 16 && currentHour <= 20)) {
+    multipliers.traffic = 1.5;
+  } else if (adr.includes('edsa') || adr.includes('c-5') || adr.includes('bgc')) {
+    multipliers.traffic = 1.25;
   }
 
-  if (adr.includes('davao') || adr.includes('j.p. laurel') || adr.includes('matina') || adr.includes('sayre')) {
-    multiplier = 2.2;
-  } else if (adr.includes('cagayan de oro') || adr.includes('iligan')) {
-    multiplier = 1.5;
-  } else if (adr.includes('mati') || adr.includes('surigao')) {
-    multiplier = 0.8;
+  // 3. Public Event & Holiday Calendars (Payday Surges)
+  const currentDay = new Date().getDate();
+  if (currentDay === 15 || currentDay === 30 || currentDay === 31) {
+    multipliers.event = 1.2;
   }
 
-  return multiplier;
+  // 4. Port & Custom Status (Dwell Time)
+  if (items.includes('container') || items.includes('bulk') || adr.includes('port') || adr.includes('pier')) {
+    multipliers.port = 1.4;
+  }
+
+  return multipliers.weather * multipliers.traffic * multipliers.event * multipliers.port;
 };
 
 // Deterministic Coordinate Generator
@@ -120,7 +123,7 @@ function FleetAssets() {
     return () => clearInterval(timer);
   }, []);
 
-  // PERSISTENCE ENGINE (V2 to flush out NaN corruption)
+  // PERSISTENCE ENGINE
   useEffect(() => {
     if (activeDeliveries.length > 0) {
       const progressMap = {};
@@ -140,9 +143,9 @@ function FleetAssets() {
 
   const fetchRoute = useCallback(async (delivery, colorIdx) => {
     const dest = getDestinationCoords(delivery);
-    const trafficMultiplier = calculateTrafficImpact(delivery.address);
+    const trafficMultiplier = runDigitalTwinMultiplier(delivery.address, delivery.item_name);
     
-    // Retrieve true timeline (Using v2 to bypass old NaN data)
+    // Retrieve true timeline
     const savedProgress = JSON.parse(localStorage.getItem('fleet_realtime_v2') || '{}');
     const state = savedProgress[delivery.delivery_id];
     const now = Date.now();
@@ -160,8 +163,10 @@ function FleetAssets() {
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         const rawMinutes = Math.ceil(data.routes[0].duration / 60);
         
-        // Lock in the total time, with aggressive fallback to prevent NaN
-        const calcTime = Math.ceil(rawMinutes * trafficMultiplier);
+        // Apply Digital Twin Multiplier + Pessimistic P90 Padding (20%)
+        const rawEta = Math.max(15, Math.ceil(rawMinutes * trafficMultiplier));
+        const calcTime = Math.ceil(rawEta * 1.20);
+        
         const totalAdjustedTime = (state && state.lockedTotalTime) ? state.lockedTotalTime : calcTime;
         
         // Calculate true elapsed time based on system clock
@@ -254,7 +259,7 @@ function FleetAssets() {
           
           const elapsedMins = (now - del.dispatchTime) / 60000;
           
-          // 100% REACHED FLAG (Safeguarded against NaN)
+          // 100% REACHED FLAG
           if (elapsedMins >= del.totalEstimatedTime) {
             return { 
               ...del, 
@@ -334,7 +339,7 @@ function FleetAssets() {
     }
   }, [activeDeliveries, vehicles, loadSystemData]);
 
-  // NEW: MANUAL GHOST TRUCK RECALL SYSTEM
+  // MANUAL GHOST TRUCK RECALL SYSTEM
   const handleRecallVehicle = async (vehicleId) => {
     try {
       await fetch(`http://localhost:5000/api/fleet/${vehicleId}`, {
@@ -343,7 +348,7 @@ function FleetAssets() {
         body: JSON.stringify({ status: 'Available', delivery_id: null })
       });
       
-      // Update local state instantly so it vanishes from the active roster
+      // Update local state instantly
       setVehicles(prev => prev.map(v => 
         (v.vehicle_id || v.id) === vehicleId ? { ...v, status: 'Available', delivery_id: null } : v
       ));
@@ -381,15 +386,41 @@ function FleetAssets() {
 
   // Only show active vehicles on this board
   const activeVehicles = vehicles.filter(
-    v => v.status === 'In Transit' || v.status === 'Out for Delivery' || v.status === 'En Route'
+    v => ['In Transit', 'Out for Delivery', 'En Route'].includes(v.status)
   );
+
+  // --- Unified Dispatch Roster ------------------------------------------------
+  const dispatchRoster = [];
+  const matchedDeliveryIds = new Set();
+
+  activeVehicles.forEach(asset => {
+    const fleetDriver = (asset.driver_name || asset.driver || "").trim().toLowerCase();
+    const tracked = activeDeliveries.find(d => {
+      const deliveryDriver = (d.driver_name || "").trim().toLowerCase();
+      return (deliveryDriver === fleetDriver && fleetDriver !== "") || 
+             (d.delivery_id === asset.delivery_id);
+    });
+
+    if (tracked) {
+      matchedDeliveryIds.add(tracked.delivery_id);
+    }
+
+    dispatchRoster.push({ asset, tracked });
+  });
+
+  // Append Orphaned / Ghost Units
+  activeDeliveries.forEach(del => {
+    if (!matchedDeliveryIds.has(del.delivery_id)) {
+      dispatchRoster.push({ asset: null, tracked: del });
+    }
+  });
 
   return (
     <div
       className={`fw-layout ${!isSidebarOpen ? 'sidebar-closed' : ''}`}
       style={{ background: t.bg, color: t.text1, transition: 'all 0.3s ease' }}
     >
-      {/* ✅ UNIFIED MASTER CSS — IDENTICAL ACROSS ALL PAGES */}
+      {/* ✅ UNIFIED MASTER CSS — SYNCED WITH DASHBOARD */}
       <style>{`
         .fw-sidebar { background: ${isDarkMode ? '#020617' : '#0f172a'} !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#0f172a'} !important; transition: all 0.3s ease; }
         .fw-brand h2 { color: white !important; }
@@ -420,6 +451,7 @@ function FleetAssets() {
         .profile-dropdown-menu button.text-danger { color: #ef4444 !important; }
         .profile-dropdown-menu button:hover, .theme-btn:hover { background: ${t.hover} !important; }
       `}</style>
+      
       {/* Toast Notification */}
       {toast && (
         <div
@@ -525,7 +557,7 @@ function FleetAssets() {
           <span className="nav-label" style={{ fontSize: '11px' }}>Core Operations</span>
           <nav className="fw-nav">
             <button className="nav-btn" onClick={() => navigate('/dashboard')}>
-              <span className="icon">❖</span> Command Center
+              <span className="icon">◈</span> Command Center
             </button>
             <button className="nav-btn" onClick={() => navigate('/customer-service')}>
               <span className="icon">⌗</span> Comms Terminal
@@ -534,17 +566,17 @@ function FleetAssets() {
               <span className="icon">▤</span> Fleet Assets
             </button>
             <button className="nav-btn" onClick={() => navigate('/analytics')}>
-              <span className="icon">◠</span> Analytics
+              <span className="icon">◓</span> Analytics
             </button>
             <button className="nav-btn" onClick={() => navigate('/account-management')}>
-              <span className="icon">⚙</span> Account Settings
+              <span className="icon">⌖</span> Account Settings
             </button>
           </nav>
         </div>
 
         <div className="fw-sidebar-bottom">
           <button className="nav-btn text-danger" onClick={handleLogout}>
-            <span className="icon">⏻</span> Secure Logout
+            <span className="icon">⇁</span> Secure Logout
           </button>
         </div>
       </aside>
@@ -568,14 +600,19 @@ function FleetAssets() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
               )}
             </button>
-            <button className="fw-icon-btn" style={{ color: t.text1 }}>⬦</button>
+            <button className="fw-icon-btn" style={{ color: t.text1 }}>◈</button>
             <div style={{ position: 'relative' }}>
               <div className="fw-profile hover-pointer" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}>
                 <div className="profile-text">
                   <span className="name" style={{ color: t.text1 }}>{user.name || 'Alfrancis'}</span>
                   <span className="role" style={{ color: t.text2 }}>{user.role || 'Operations Lead'}</span>
                 </div>
-                <img src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
+                <img 
+                  src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} 
+                  alt="Profile" 
+                  style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover', background: '#e2e8f0' }} 
+                  onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} 
+                />
               </div>
               {isProfileMenuOpen && (
                 <div className="profile-dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: '12px', background: t.card, borderRadius: '12px', width: '220px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: `1px solid ${t.border}`, zIndex: 1000, padding: '8px' }}>
@@ -631,37 +668,38 @@ function FleetAssets() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeVehicles.length > 0 ? (
-                    activeVehicles.map((asset) => {
-                      const fleetDriver = (asset.driver_name || asset.driver || "").trim().toLowerCase();
-                      const tracked = activeDeliveries.find(d => {
-                        const deliveryDriver = (d.driver_name || "").trim().toLowerCase();
-                        return (deliveryDriver === fleetDriver && fleetDriver !== "") || 
-                               (d.delivery_id === asset.delivery_id);
-                      });
+                  {dispatchRoster.length > 0 ? (
+                    dispatchRoster.map(({ asset, tracked }) => {
+                      const rowKey = asset ? (asset.vehicle_id || asset.id) : `ghost-del-${tracked.delivery_id}`;
+                      const vehicleIdDisplay = asset ? `VHL-${String(asset.vehicle_id || asset.id).padStart(4, '0')}` : '⚠ UNLINKED';
+                      const driverDisplay = asset ? (asset.driver_name || asset.driver) : (tracked.driver_name || 'Unassigned');
+                      const classDisplay = asset ? (asset.vehicle_type || asset.vehicle) : 'Ghost Unit';
+                      const statusDisplay = asset ? asset.status : 'System Tracking';
 
                       return (
-                        <tr key={asset.vehicle_id || asset.id} className="table-row-hover">
-                          <td style={{ padding: '20px 32px', fontSize: '15px', fontWeight: '700', color: '#2563eb', fontFamily: 'monospace' }}>
-                            VHL-{String(asset.vehicle_id || asset.id).padStart(4, '0')}
+                        <tr key={rowKey} className="table-row-hover">
+                          <td style={{ padding: '20px 32px', fontSize: '15px', fontWeight: '700', color: asset ? '#2563eb' : '#f59e0b', fontFamily: 'monospace' }}>
+                            {vehicleIdDisplay}
                           </td>
                           <td style={{ padding: '20px 32px', fontSize: '15px', fontWeight: '600' }}>
-                            {asset.driver_name || asset.driver}
+                            {driverDisplay}
                           </td>
                           <td style={{ padding: '20px 32px', fontSize: '15px', color: '#64748b' }}>
-                            {asset.vehicle_type || asset.vehicle}
+                            {classDisplay}
                           </td>
                           <td style={{ padding: '20px 32px' }}>
                             <span 
                               className="fw-badge" 
                               style={{ 
                                 fontSize: '12px',
-                                background: tracked?.arrived ? '#dcfce7' : '#eff6ff', 
-                                color: tracked?.arrived ? '#16a34a' : '#2563eb',
-                                border: `1px solid ${tracked?.arrived ? '#bbf7d0' : '#dbeafe'}`
+                                background: tracked?.arrived ? '#dcfce7' : (asset ? '#eff6ff' : '#fef3c7'), 
+                                color: tracked?.arrived ? '#16a34a' : (asset ? '#2563eb' : '#d97706'),
+                                border: `1px solid ${tracked?.arrived ? '#bbf7d0' : (asset ? '#dbeafe' : '#fde68a')}`,
+                                padding: '4px 8px',
+                                borderRadius: '4px'
                               }}
                             >
-                              {tracked?.arrived ? 'Unloading' : asset.status}
+                              {tracked?.arrived ? 'Unloading' : statusDisplay}
                             </span>
                           </td>
                           <td style={{ padding: '20px 32px', textAlign: 'center' }}>
@@ -671,8 +709,9 @@ function FleetAssets() {
                                     <span style={{ fontSize: '16px', fontWeight: '800', color: tracked.arrived ? '#10b981' : t.text1 }}>
                                       {tracked.arrived ? 'ARRIVED' : `${tracked.etaMins} mins`}
                                     </span>
-                                    <span style={{ fontSize: '10px', fontWeight: '700', color: tracked.arrived ? '#10b981' : (tracked.trafficFactor > 1.5 ? '#ef4444' : '#64748b') }}>
-                                      {tracked.arrived ? 'DOCKING SEQUENCE' : (tracked.trafficFactor > 1.5 ? '⚠ HIGH TRAFFIC' : 'ROAD CLEAR')}
+                                    {/* ✅ GRANULAR TRAFFIC WARNINGS SYNCED WITH DIGITAL TWIN MULTIPLIER */}
+                                    <span style={{ fontSize: '10px', fontWeight: '700', color: tracked.arrived ? '#10b981' : (tracked.trafficFactor >= 1.8 ? '#ef4444' : (tracked.trafficFactor >= 1.3 ? '#f59e0b' : '#64748b')) }}>
+                                      {tracked.arrived ? 'DOCKING SEQUENCE' : (tracked.trafficFactor >= 1.8 ? '⚠ SEVERE DELAYS' : (tracked.trafficFactor >= 1.3 ? '⚠ ROUTE CONGESTION' : '◈ NOMINAL ROUTE'))}
                                     </span>
                                   </>
                                 ) : (
@@ -681,7 +720,7 @@ function FleetAssets() {
                             </div>
                           </td>
                           <td className="text-right" style={{ padding: '20px 32px', display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                            {!tracked && (
+                            {!tracked && asset && (
                               <button 
                                 onClick={() => handleRecallVehicle(asset.vehicle_id || asset.id)}
                                 style={{
@@ -698,20 +737,22 @@ function FleetAssets() {
                                 RECALL
                               </button>
                             )}
-                            <button 
-                              className="fw-btn-icon" 
-                              style={{ color: '#ef4444', fontSize: '18px' }}
-                              onClick={() => setDeleteConfirm(asset.vehicle_id || asset.id)}
-                            >
-                              ✕
-                            </button>
+                            {asset && (
+                              <button 
+                                className="fw-btn-icon" 
+                                style={{ color: '#ef4444', fontSize: '18px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                                onClick={() => setDeleteConfirm(asset.vehicle_id || asset.id)}
+                              >
+                                ✕
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan="6" className="empty-table" style={{ padding: '60px', fontSize: '16px', color: t.text2 }}>
+                      <td colSpan="6" className="empty-table" style={{ padding: '60px', fontSize: '16px', color: t.text2, textAlign: 'center' }}>
                         No transport assets currently deployed.
                       </td>
                     </tr>

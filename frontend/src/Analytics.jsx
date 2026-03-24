@@ -18,8 +18,17 @@ function Analytics() {
   // ✅ UNIFIED DARK MODE STATE
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
   
-  // ✅ NEW: Currency Tracker State
+  // ✅ DYNAMIC CURRENCY ENGINE STATE
   const [currency, setCurrency] = useState('USD');
+  const [lastUpdate, setLastUpdate] = useState(() => {
+    return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  });
+  
+  // Initialize with fallbacks, these will be overwritten by the Live API
+  const [exchangeRates, setExchangeRates] = useState({ 
+    USD: 1, PHP: 56.50, EUR: 0.92, JPY: 150.20, GBP: 0.79, 
+    AUD: 1.53, CAD: 1.36, CHF: 0.88, CNY: 7.20, HKD: 7.82, NZD: 1.66 
+  });
   
   // LIVE DB STATE
   const [trendData, setTrendData] = useState([]);
@@ -55,14 +64,16 @@ function Analytics() {
     hover: isDarkMode ? '#1e293b' : '#f1f5f9',
   };
 
-  // --- SUPREME DEBUG DATA ENGINE (Connected to DB) ---
+  // --- SUPREME DEBUG DATA & LIVE CURRENCY ENGINE ---
   const fetchAnalyticsData = async () => {
     setIsSyncing(true);
     
     try {
-      const [trendRes, statsRes] = await Promise.all([
+      const [trendRes, statsRes, currencyRes] = await Promise.all([
         fetch('http://localhost:5000/api/analytics/trends'),
-        fetch('http://localhost:5000/api/stats')
+        fetch('http://localhost:5000/api/stats'),
+        // ✅ FREE PUBLIC API FOR LIVE EXCHANGE RATES (No API Key Required)
+        fetch('https://open.er-api.com/v6/latest/USD').catch(() => null)
       ]);
       
       if (!trendRes.ok) throw new Error(`Trend API failed with status ${trendRes.status}`);
@@ -73,6 +84,24 @@ function Analytics() {
       
       setTrendData(trend);
       setStats(st);
+
+      // ✅ Parse Live Exchange Rates and Update Timestamp
+      if (currencyRes && currencyRes.ok) {
+        const currencyData = await currencyRes.json();
+        if (currencyData && currencyData.rates) {
+          setExchangeRates(prev => ({
+            ...prev,
+            ...currencyData.rates
+          }));
+          
+          if (currencyData.time_last_update_unix) {
+            const apiDate = new Date(currencyData.time_last_update_unix * 1000);
+            setLastUpdate(apiDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+          }
+          console.log("💱 Live Exchange Rates Synchronized.");
+        }
+      }
+
     } catch (e) {
       console.error("🚨 ANALYTICS CRASH DETAILS:", e.message);
     } finally {
@@ -94,9 +123,6 @@ function Analytics() {
   }, []);
 
   // --- DYNAMIC DATA MAPPING & CURRENCY ENGINE ---
-  
-  // ✅ Top 10 Traded Currencies + PHP Conversion Rates (Approximate Base)
-  const exchangeRates = { USD: 1, PHP: 56.50, EUR: 0.92, JPY: 150.20, GBP: 0.79, AUD: 1.53, CAD: 1.36, CHF: 0.88, CNY: 7.20, HKD: 7.82, NZD: 1.66 };
   const currencySymbols = { USD: '$', PHP: '₱', EUR: '€', JPY: '¥', GBP: '£', AUD: 'A$', CAD: 'C$', CHF: 'Fr', CNY: '¥', HKD: 'HK$', NZD: 'NZ$' };
 
   // 1. Live Volume Trend (Calculates Revenue based on actual DB shipments + selected currency)
@@ -105,7 +131,7 @@ function Analytics() {
       return trendData.map(t => ({
         name: t.date,
         shipments: t.count,
-        revenue: (t.count * 125) * exchangeRates[currency], // Scales graph based on currency
+        revenue: (t.count * 125) * (exchangeRates[currency] || 1), // Dynamically scaled
         fuel: t.count * 18
       }));
     }
@@ -116,11 +142,11 @@ function Analytics() {
       { name: 'Fri', shipments: 0, revenue: 0 }, { name: 'Sat', shipments: 0, revenue: 0 },
       { name: 'Sun', shipments: 0, revenue: 0 }
     ];
-  }, [trendData, currency]);
+  }, [trendData, currency, exchangeRates]);
 
   // Calculate live totals for KPI cards
   const totalShipments = useMemo(() => trendData.reduce((acc, curr) => acc + curr.count, 0), [trendData]);
-  const totalRevenue = totalShipments * 125 * exchangeRates[currency]; // Base $125 per shipment
+  const totalRevenue = totalShipments * 125 * (exchangeRates[currency] || 1); // Base $125 per shipment converted dynamically
 
   // 2. Live Pie Chart Data
   const statusPieData = useMemo(() => [
@@ -341,8 +367,12 @@ function Analytics() {
               <div className="kpi-value" style={{ fontSize: '28px', fontWeight: '900', color: t.text1 }}>
                 {currencySymbols[currency]}{totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
               </div>
-              <div className="kpi-trend" style={{ fontSize: '12px', marginTop: '8px', color: t.text2 }}>
-                <span className="trend-up" style={{ color: '#10b981', fontWeight: '700' }}>Live Conversion</span> applied
+              
+              {/* ✅ UPDATED KPI TREND WITH LIVE RATE AND TIMESTAMP */}
+              <div className="kpi-trend" style={{ fontSize: '12px', marginTop: '12px', color: t.text2, lineHeight: '1.5' }}>
+                <span style={{ color: '#10b981', fontWeight: '700' }}>Live Rate:</span> 1 USD = {currencySymbols[currency]}{(exchangeRates[currency] || 1).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} {currency}
+                <br />
+                <span style={{ fontSize: '10px', color: t.text3, fontWeight: '600' }}>Effective as of {lastUpdate}</span>
               </div>
             </div>
 
