@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, Cell, PieChart, Pie
@@ -15,10 +17,10 @@ function Analytics() {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // ✅ UNIFIED DARK MODE STATE
+  // UNIFIED DARK MODE STATE
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
   
-  // ✅ DYNAMIC CURRENCY ENGINE STATE
+  // DYNAMIC CURRENCY ENGINE STATE
   const [currency, setCurrency] = useState('USD');
   const [lastUpdate, setLastUpdate] = useState(() => {
     return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -37,7 +39,7 @@ function Analytics() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{"name":"Operative","role":"Operations Lead"}');
 
-  // ✅ UNIFIED THEME ENGINE
+  // UNIFIED THEME ENGINE
   const toggleTheme = () => {
     setIsDarkMode(prev => {
       const next = !prev;
@@ -72,7 +74,7 @@ function Analytics() {
       const [trendRes, statsRes, currencyRes] = await Promise.all([
         fetch('http://localhost:5000/api/analytics/trends'),
         fetch('http://localhost:5000/api/stats'),
-        // ✅ FREE PUBLIC API FOR LIVE EXCHANGE RATES (No API Key Required)
+        // FREE PUBLIC API FOR LIVE EXCHANGE RATES (No API Key Required)
         fetch('https://open.er-api.com/v6/latest/USD').catch(() => null)
       ]);
       
@@ -85,7 +87,7 @@ function Analytics() {
       setTrendData(trend);
       setStats(st);
 
-      // ✅ Parse Live Exchange Rates and Update Timestamp
+      // Parse Live Exchange Rates and Update Timestamp
       if (currencyRes && currencyRes.ok) {
         const currencyData = await currencyRes.json();
         if (currencyData && currencyData.rates) {
@@ -170,6 +172,66 @@ function Analytics() {
     navigate('/');
   };
 
+  // --- ENHANCED PDF GENERATION ENGINE ---
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      
+      // Header
+      doc.setFontSize(20);
+      doc.text("GILFFC Logistics - In-Depth Analytics Report", 14, 22);
+      doc.setFontSize(10);
+      doc.text(`Generated: ${new Date().toLocaleString()} | Currency: ${currency}`, 14, 30);
+      
+      // Executive Summary
+      doc.setFontSize(14);
+      doc.text("Executive Summary", 14, 40);
+      doc.setFontSize(11);
+      doc.text("This report provides an in-depth analysis of logistics performance over the last 7 days.", 14, 48);
+      
+      // Trend Table Summary
+      const summaryBody = [
+        ["Total Shipments", totalShipments.toString()],
+        ["Gross Revenue", `${currencySymbols[currency]}${totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`],
+        ["Status: Pending", stats.pending.toString()],
+        ["Status: Delivered", stats.delivered.toString()],
+        ["Status: In Transit", stats.outForDelivery.toString()]
+      ];
+      
+      autoTable(doc, { 
+        startY: 55, head: [['Metric', 'Value']], body: summaryBody, theme: 'striped' 
+      });
+
+      // Deep Dive Page
+      doc.addPage();
+      doc.setFontSize(16); doc.text("Operational Metrics & Efficiency", 14, 20);
+      
+      const metricsBody = [
+        ['On-Time Ratio', '98.0%', '98.4%', '+0.4%'],
+        ['Delivery Cost/km', '$1.20', '$1.14', '-$0.06'],
+        ['Load Capacity', '85.0%', '81.2%', '-3.8%'],
+        ['Carbon Credit', '1,200', '1,340', '+140']
+      ];
+      
+      autoTable(doc, { 
+        startY: 30,
+        head: [['Metric', 'Target', 'Actual', 'Variance']], 
+        body: metricsBody,
+        theme: 'grid',
+      });
+
+      // Safely calculate the final Y position after the table to place the analysis text
+      const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 80;
+      doc.setFontSize(10);
+      doc.text("Analysis: Operations show steady growth from Mon-Wed, with significant surges towards weekend peak days.", 14, finalY + 15);
+      
+      doc.save(`GILFFC_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch (err) {
+      console.error("PDF Generation Failed: ", err);
+      alert("Failed to generate the PDF report. Please check the developer console for details.");
+    }
+  };
+
   // --- CUSTOM TOOLTIP (Handles Currency Symbols dynamically) ---
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -199,7 +261,7 @@ function Analytics() {
   return (
     <div className={`fw-layout ${!isSidebarOpen ? 'sidebar-closed' : ''}`} style={{ background: t.bg, color: t.text1, transition: 'all 0.3s ease' }}>
       
-      {/* ✅ MASTER CSS: GUARANTEES IDENTICAL UI ACROSS ALL PAGES */}
+      {/* MASTER CSS: GUARANTEES IDENTICAL UI ACROSS ALL PAGES */}
       <style>{`
         .fw-sidebar { background: ${isDarkMode ? '#020617' : '#0f172a'} !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#0f172a'} !important; transition: all 0.3s ease; }
         .fw-brand h2 { color: white !important; }
@@ -242,21 +304,20 @@ function Analytics() {
 
       <aside className="fw-sidebar">
         <div className="fw-brand">
-          <div className="brand-logo-container"><img src="/gilffc-logo-globe.png" alt="GILFFC" /></div>
           <div className="brand-titles"><h2>GILFFC</h2><span>Logistics OS</span></div>
         </div>
         <div className="fw-nav-section">
           <span className="nav-label" style={{ color: t.text3 }}>Core Operations</span>
           <nav className="fw-nav">
-            <button className="nav-btn" onClick={() => navigate('/dashboard')}><span className="icon">❖</span> Command Center</button>
-            <button className="nav-btn" onClick={() => navigate('/customer-service')}><span className="icon">⌗</span> Comms Terminal</button>
-            <button className="nav-btn" onClick={() => navigate('/fleet-assets')}><span className="icon">▤</span> Fleet Assets</button>
-            <button className="nav-btn active" onClick={() => navigate('/analytics')}><span className="icon">◠</span> Analytics</button>
-            <button className="nav-btn" onClick={() => navigate('/account-management')}><span className="icon">⚙</span> Account Settings</button>
+            <button className="nav-btn" onClick={() => navigate('/dashboard')}>Command Center</button>
+            <button className="nav-btn" onClick={() => navigate('/customer-service')}>Comms Terminal</button>
+            <button className="nav-btn" onClick={() => navigate('/fleet-assets')}>Fleet Assets</button>
+            <button className="nav-btn active" onClick={() => navigate('/analytics')}>Analytics</button>
+            <button className="nav-btn" onClick={() => navigate('/account-management')}>Account Settings</button>
           </nav>
         </div>
         <div className="fw-sidebar-bottom">
-          <button className="nav-btn text-danger" onClick={handleLogout}><span className="icon">⏻</span> Secure Logout</button>
+          <button className="nav-btn text-danger" onClick={handleLogout}>Secure Logout</button>
         </div>
       </aside>
 
@@ -274,7 +335,7 @@ function Analytics() {
           
           <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             
-            {/* ✅ PROFESSIONAL SVG THEME TOGGLE */}
+            {/* PROFESSIONAL SVG THEME TOGGLE */}
             <button onClick={toggleTheme} className="theme-btn" style={{ background: 'transparent', border: `1px solid ${t.border}`, color: t.text2, padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}>
               {isDarkMode ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
@@ -287,11 +348,9 @@ function Analytics() {
             <div style={{ position: 'relative' }}>
               <div className="fw-profile hover-pointer" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}>
                 <div className="profile-text">
-                  <span className="name" style={{ color: t.text1 }}>{user.name || 'Alfrancis'}</span>
-                  <span className="role" style={{ color: t.text2 }}>{user.role || 'Administrator'}</span>
+                  <span className="name" style={{ fontSize: '14px', fontWeight: '800', color: t.text1 }}>{user.name || 'Alfrancis'}</span>
+                  <span className="role" style={{ fontSize: '11px', fontWeight: '600', color: t.text2 }}>{user.role || 'Administrator'}</span>
                 </div>
-                {/* ✅ BROKEN IMAGE FIX */}
-                <img src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
               </div>
 
               {isProfileMenuOpen && (
@@ -332,6 +391,13 @@ function Analytics() {
                 >
                   {isSyncing ? 'Syncing...' : 'Sync Live Data'}
                 </button>
+                <button 
+                  className="fw-btn-outline" 
+                  onClick={exportToPDF}
+                  style={{ background: 'transparent', color: t.text1, padding: '10px 20px', borderRadius: '8px', fontWeight: '700', border: `1px solid ${t.border}`, cursor: 'pointer', transition: 'all 0.3s' }}
+                >
+                  Export PDF Report
+                </button>
               </div>
             </div>
           </div>
@@ -368,7 +434,6 @@ function Analytics() {
                 {currencySymbols[currency]}{totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
               </div>
               
-              {/* ✅ UPDATED KPI TREND WITH LIVE RATE AND TIMESTAMP */}
               <div className="kpi-trend" style={{ fontSize: '12px', marginTop: '12px', color: t.text2, lineHeight: '1.5' }}>
                 <span style={{ color: '#10b981', fontWeight: '700' }}>Live Rate:</span> 1 USD = {currencySymbols[currency]}{(exchangeRates[currency] || 1).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} {currency}
                 <br />
@@ -411,24 +476,8 @@ function Analytics() {
             </div>
 
             <div className="fw-data-panel" style={{ background: t.card, padding: '32px', borderRadius: '20px', border: `1px solid ${t.border}` }}>
-              <div className="panel-header" style={{ marginBottom: '24px' }}><h3 style={{ fontSize: '18px', fontWeight: '800', color: t.text1 }}>Regional Distribution</h3></div>
+              <div className="panel-header" style={{ marginBottom: '24px' }}><h3 style={{ fontSize: '18px', fontWeight: '800', color: t.text1 }}>Operational Distribution</h3></div>
               <div className="chart-container" style={{ height: 350 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={regionalData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDarkMode ? '#1e293b' : '#f1f5f9'} />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="region" type="category" axisLine={false} tickLine={false} tick={{fill: isDarkMode ? '#cbd5e1' : '#1e293b', fontSize: 11, fontWeight: '800'}} width={80} />
-                    <Tooltip cursor={{fill: isDarkMode ? '#1e293b' : '#f8fafc'}} content={<CustomTooltip />} />
-                    <Bar dataKey="domestic" name="Domestic" fill="#2563eb" radius={[0, 4, 4, 0]} barSize={12} />
-                    <Bar dataKey="international" name="International" fill={isDarkMode ? '#475569' : '#94a3b8'} radius={[0, 4, 4, 0]} barSize={12} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="fw-data-panel" style={{ background: t.card, padding: '32px', borderRadius: '20px', border: `1px solid ${t.border}` }}>
-              <div className="panel-header" style={{ marginBottom: '24px' }}><h3 style={{ fontSize: '18px', fontWeight: '800', color: t.text1 }}>Active Network Status</h3></div>
-              <div className="chart-container" style={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusPieData} innerRadius={70} outerRadius={95} paddingAngle={8} dataKey="value" stroke="none">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css'; 
 import './AccountManagement.css';
@@ -7,7 +7,7 @@ function AccountManagement() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [activeTab, setActiveTab] = useState('profile');
   
-  // ✅ UNIFIED DARK MODE STATE
+  // UNIFIED DARK MODE STATE
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
   
   const navigate = useNavigate();
@@ -20,11 +20,9 @@ function AccountManagement() {
   const [suggestedPass, setSuggestedPass] = useState('');
   const [isPasswordWeak, setIsPasswordWeak] = useState(false);
   
-  const fileInputRef = useRef(null);
-  const [avatarUrl, setAvatarUrl] = useState(localStorage.getItem('user_avatar') || '/avatar-placeholder.png');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-  // ✅ UNIFIED THEME ENGINE
+  // UNIFIED THEME ENGINE
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
     setIsDarkMode(newTheme);
@@ -169,23 +167,12 @@ function AccountManagement() {
     }
   };
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setAvatarUrl(imageUrl);
-      localStorage.setItem('user_avatar', imageUrl); 
-      setSysMsg({ type: 'success', text: 'Avatar successfully updated in local cache.' });
-      setTimeout(() => setSysMsg({ type: '', text: '' }), 3000);
-    }
-  };
-
   const handleLogout = () => { localStorage.removeItem('user'); navigate('/'); };
 
   return (
     <div className={`fw-layout ${!isSidebarOpen ? 'sidebar-closed' : ''}`} style={{ background: t.bg, color: t.text1, transition: 'all 0.3s ease' }}>
       
-      {/* ✅ MASTER CSS: GUARANTEES IDENTICAL UI ACROSS ALL PAGES */}
+      {/* MASTER CSS: GUARANTEES IDENTICAL UI ACROSS ALL PAGES */}
       <style>{`
         .fw-sidebar { background: ${isDarkMode ? '#020617' : '#0f172a'} !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#0f172a'} !important; transition: all 0.3s ease; }
         .fw-brand h2 { color: white !important; }
@@ -228,21 +215,20 @@ function AccountManagement() {
 
       <aside className="fw-sidebar">
         <div className="fw-brand">
-          <div className="brand-logo-container"><img src="/gilffc-logo-globe.png" alt="GILFFC" /></div>
           <div className="brand-titles"><h2>GILFFC</h2><span>Logistics OS</span></div>
         </div>
         <div className="fw-nav-section">
           <span className="nav-label">Core Operations</span>
           <nav className="fw-nav">
-            <button className="nav-btn" onClick={() => navigate('/dashboard')}><span className="icon">❖</span> Command Center</button>
-            <button className="nav-btn" onClick={() => navigate('/customer-service')}><span className="icon">⌗</span> Comms Terminal</button>
-            <button className="nav-btn" onClick={() => navigate('/fleet-assets')}><span className="icon">▤</span> Fleet Assets</button>
-            <button className="nav-btn" onClick={() => navigate('/analytics')}><span className="icon">◠</span> Analytics</button>
-            <button className="nav-btn active" onClick={() => navigate('/account-management')}><span className="icon">⚙</span> Account Settings</button>
+            <button className="nav-btn" onClick={() => navigate('/dashboard')}>Command Center</button>
+            <button className="nav-btn" onClick={() => navigate('/customer-service')}>Comms Terminal</button>
+            <button className="nav-btn" onClick={() => navigate('/fleet-assets')}>Fleet Assets</button>
+            <button className="nav-btn" onClick={() => navigate('/analytics')}>Analytics</button>
+            <button className="nav-btn active" onClick={() => navigate('/account-management')}>Account Settings</button>
           </nav>
         </div>
         <div className="fw-sidebar-bottom">
-          <button className="nav-btn text-danger" onClick={handleLogout}><span className="icon">⏻</span> Secure Logout</button>
+          <button className="nav-btn text-danger" onClick={handleLogout}>Secure Logout</button>
         </div>
       </aside>
 
@@ -258,7 +244,6 @@ function AccountManagement() {
           
           <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             
-            {/* SVG THEME TOGGLE */}
             <button onClick={toggleTheme} className="theme-btn" style={{ background: 'transparent', border: `1px solid ${t.border}`, color: t.text2, padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}>
               {isDarkMode ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
@@ -273,8 +258,6 @@ function AccountManagement() {
                   <span className="name" style={{ fontSize: '14px', fontWeight: '800', color: t.text1 }}>{profile.full_name || 'Operative'}</span>
                   <span className="role" style={{ fontSize: '11px', fontWeight: '600', color: t.text2 }}>{profile.role || 'Administrator'}</span>
                 </div>
-                {/* ✅ BROKEN IMAGE FIX ADDED HERE */}
-                <img src={avatarUrl} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
               </div>
 
               {isProfileMenuOpen && (
@@ -333,15 +316,7 @@ function AccountManagement() {
                     </div>
                     <form onSubmit={handleUpdateProfile}>
                       <div className="card-body" style={{ padding: '32px' }}>
-                        <div className="profile-upload-section" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                          <img src={avatarUrl} alt="Avatar" className="large-avatar" style={{ width: '100px', height: '100px', borderRadius: '20px', objectFit: 'cover', border: `4px solid ${t.hover}` }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
-                          <div className="upload-actions">
-                            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleAvatarChange} />
-                            <button type="button" className="theme-btn" style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${t.border}`, background: t.card, color: t.text1, fontWeight: '700', fontSize: '13px', cursor: 'pointer', marginBottom: '8px', display: 'block' }} onClick={() => fileInputRef.current.click()}>Change Avatar</button>
-                            <span style={{fontSize: '11px', color: t.text3}}>JPG or PNG. Max 2MB.</span>
-                          </div>
-                        </div>
-                        <div className="fw-form mt-4" style={{ marginTop: '32px' }}>
+                        <div className="fw-form" style={{ marginTop: '0' }}>
                           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                             <div className="form-group half"><label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: t.text2, marginBottom: '8px', textTransform: 'uppercase' }}>Full Name</label><input style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${t.border}`, background: t.inputBg, color: t.text1, fontWeight: '600' }} type="text" value={profile.full_name} onChange={e => setProfile({...profile, full_name: e.target.value})} required /></div>
                             <div className="form-group half"><label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: t.text2, marginBottom: '8px', textTransform: 'uppercase' }}>Operative ID</label><input style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${t.border}`, background: t.inputDisabled, fontWeight: '800', color: t.text3 }} type="text" value={`OP-${sessionUser.id ? sessionUser.id.toString().padStart(4, '0') : 'XXXX'}`} disabled /></div>
@@ -434,20 +409,17 @@ function AccountManagement() {
                     </div>
                     <div className="card-body p-0">
                       <table className="fw-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead><tr><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>User</th><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>Role</th><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>Last Active</th><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>Status</th><th></th></tr></thead>
+                        <thead><tr><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>User</th><th style={{ padding: '16px 32px', fontSize: '11px', color: t.text3, textTransform: 'uppercase', textAlign: 'left' }}>Role</th><th></th></tr></thead>
                         <tbody>
                           {team.map((member) => (
                           <tr key={member.user_id} className="table-row-hover">
                             <td className="user-cell" style={{ padding: '20px 32px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                              <img src={member.user_id === sessionUser.id ? avatarUrl : '/avatar-placeholder.png'} alt="User" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
                               <div>
                                 <span className="cell-primary" style={{ display: 'block', fontSize: '14px', fontWeight: '700' }}>{member.full_name}</span>
                                 <span className="cell-secondary" style={{ fontSize: '12px', color: t.text2 }}>{member.email}</span>
                               </div>
                             </td>
                             <td style={{ padding: '20px 32px' }}><span style={{ background: isDarkMode ? 'rgba(16,185,129,0.15)' : '#dcfce7', color: '#10b981', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>{member.role || 'Administrator'}</span></td>
-                            <td style={{ padding: '20px 32px', fontSize: '13px', color: t.text2, fontWeight: '500' }}>{member.user_id === sessionUser.id ? 'Just now' : 'Offline'}</td>
-                            <td style={{ padding: '20px 32px' }}><span style={{color: member.user_id === sessionUser.id ? '#10b981' : t.text3, fontSize: '13px', fontWeight: '800'}}>● {member.user_id === sessionUser.id ? 'Online' : 'Offline'}</span></td>
                             <td className="text-right" style={{ padding: '20px 32px', textAlign: 'right' }}><button style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '700', cursor: 'pointer' }} onClick={() => handleEditOperative(member)}>Edit</button></td>
                           </tr>
                           ))}
@@ -456,8 +428,7 @@ function AccountManagement() {
                     </div>
                   </div>
                 </div>
-              )
-               }
+              )}
             </div>
           </div>
         </div>

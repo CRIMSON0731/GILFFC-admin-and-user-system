@@ -6,13 +6,11 @@ import './Dashboard.css';
 import './CustomerService.css';
 
 function CustomerService() {
-  // --- SYSTEM & DATA STATE ---
   const [deliveries, setDeliveries] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // --- UI CONTROL STATE ---
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [activeChatClient, setActiveChatClient] = useState(null);
@@ -22,7 +20,6 @@ function CustomerService() {
   const [newMessage, setNewMessage] = useState('');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-  // ✅ UNIFIED DARK MODE STATE
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
 
   const toggleTheme = () => {
@@ -49,7 +46,6 @@ function CustomerService() {
     mutedBorder: isDarkMode ? '#334155' : '#f1f5f9'
   };
 
-  // ✅ ADDED: Notification Tracking State
   const [prevMsgCount, setPrevMsgCount] = useState(0);
 
   const chatEndRef = useRef(null);
@@ -65,7 +61,6 @@ function CustomerService() {
   };
   const user = getUserSession();
 
-  // --- UPGRADED DATA ENGINE (ROBUST ERROR HANDLING) ---
   const loadTerminalData = async () => {
     try {
       const [delRes, msgRes] = await Promise.all([
@@ -73,7 +68,6 @@ function CustomerService() {
         fetch('http://localhost:5000/api/messages')
       ]);
 
-      // Step-by-step verification to pinpoint the failure
       if (!delRes.ok) {
         throw new Error(`Deliveries API failed with status: ${delRes.status}`);
       }
@@ -87,17 +81,14 @@ function CustomerService() {
       setDeliveries(Array.isArray(delData) ? delData : []);
       setMessages(Array.isArray(msgData) ? msgData : []);
       
-      // Clear error if sync is successful
       setError(null);
     } catch (err) {
-      // Detailed error logging as suggested
       console.error("Communications Link Error Details:", {
         message: err.message,
         stack: err.stack,
         timestamp: new Date().toLocaleTimeString()
       });
 
-      // Providing specific user feedback based on the error
       if (err.message.includes('Failed to fetch')) {
         setError("Network Error: Cannot reach the backend server.");
       } else {
@@ -121,16 +112,39 @@ function CustomerService() {
     };
   }, []);
 
-  // ✅ ADDED: Notification Sound Logic
+  // ✅ ENHANCED NOTIFICATION ENGINE (Sound + Browser Tab Red Mark)
   useEffect(() => {
+    const unreadCount = messages.filter(m => m.sender_name !== 'Admin' && !m.is_read).length;
+
     if (messages.length > prevMsgCount) {
       const lastMsg = messages[messages.length - 1];
-      // Only ping if message is incoming from a Client
-      if (lastMsg && lastMsg.sender_name !== 'Admin') {
-        new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(() => {});
+      
+      // Play sound only if it's a new message (not initial load sync)
+      if (lastMsg && lastMsg.sender_name !== 'Admin' && prevMsgCount > 0) {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+        audio.play().catch(err => console.log("Audio play blocked by browser:", err));
       }
       setPrevMsgCount(messages.length);
     }
+
+    // Dynamic Browser Tab Notification
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) New Message - GILFFC`;
+      // Overrides Favicon with a solid red dot
+      link.href = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%23ef4444" /></svg>';
+    } else {
+      document.title = "Comms Terminal - GILFFC";
+      link.href = '/favicon.ico'; // Restores default
+    }
+
+    return () => { document.title = "GILFFC Logistics OS"; };
   }, [messages, prevMsgCount]);
 
   useEffect(() => {
@@ -139,25 +153,22 @@ function CustomerService() {
     }
   }, [messages, isChatOpen]);
 
-  // ✅ UPDATED: Count unread based on is_read column
   const getUnreadCount = (deliveryId) => {
     return messages.filter(m => m.delivery_id === deliveryId && m.sender_name !== 'Admin' && !m.is_read).length;
   };
 
-  // ✅ UPDATED: Mark as read when opening session
   const startChatSession = async (clientName, deliveryId) => {
     setActiveChatClient(clientName);
     setActiveDeliveryId(deliveryId);
     setIsChatOpen(true);
 
-    // API: Clear notifications for this delivery node
     try {
       await fetch(`http://localhost:5000/api/messages/read/${deliveryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'Admin' })
       });
-      loadTerminalData(); // Refresh UI to remove badge
+      loadTerminalData(); 
     } catch (err) {
       console.error("Failed to clear notifications");
     }
@@ -276,7 +287,6 @@ function CustomerService() {
   return (
     <div className={`fw-layout ${!isSidebarOpen ? 'sidebar-closed' : ''}`} style={{ background: t.bg, color: t.text1 }}>
       
-      {/* ✅ UNIFIED MASTER CSS — IDENTICAL ACROSS ALL PAGES */}
       <style>{`
         .fw-sidebar { background: ${isDarkMode ? '#020617' : '#0f172a'} !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#0f172a'} !important; transition: all 0.3s ease; }
         .fw-brand h2 { color: white !important; }
@@ -318,9 +328,6 @@ function CustomerService() {
 
       <aside className="fw-sidebar">
         <div className="fw-brand">
-          <div className="brand-logo-container">
-            <img src="/gilffc-logo-globe.png" alt="GILFFC" />
-          </div>
           <div className="brand-titles">
             <h2>GILFFC</h2>
             <span>Logistics OS</span>
@@ -331,26 +338,26 @@ function CustomerService() {
           <span className="nav-label" style={{ fontSize: '11px' }}>Core Operations</span>
           <nav className="fw-nav">
             <button className="nav-btn" onClick={() => navigate('/dashboard')}>
-              <span className="icon">❖</span> Command Center
+              Command Center
             </button>
             <button className="nav-btn active" onClick={() => navigate('/customer-service')}>
-              <span className="icon">⌗</span> Comms Terminal
+              Comms Terminal
             </button>
             <button className="nav-btn" onClick={() => navigate('/fleet-assets')}>
-              <span className="icon">▤</span> Fleet Assets
+              Fleet Assets
             </button>
             <button className="nav-btn" onClick={() => navigate('/analytics')}>
-              <span className="icon">◠</span> Analytics
+              Analytics
             </button>
             <button className="nav-btn" onClick={() => navigate('/account-management')}>
-              <span className="icon">⚙</span> Account Settings
+              Account Settings
             </button>
           </nav>
         </div>
 
         <div className="fw-sidebar-bottom">
           <button className="nav-btn text-danger" onClick={handleLogout}>
-            <span className="icon">⏻</span> Secure Logout
+            Secure Logout
           </button>
         </div>
       </aside>
@@ -375,14 +382,13 @@ function CustomerService() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
               )}
             </button>
-            <button className="fw-icon-btn" style={{ color: t.text1 }}>⬦</button>
+            
             <div style={{ position: 'relative' }}>
               <div className="fw-profile hover-pointer" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}>
                 <div className="profile-text">
                   <span className="name" style={{ color: t.text1 }}>{user.name || 'Alfrancis'}</span>
                   <span className="role" style={{ color: t.text2 }}>{user.role || 'Operations Lead'}</span>
                 </div>
-                <img src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} alt="Profile" style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} />
               </div>
               {isProfileMenuOpen && (
                 <div className="profile-dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: '12px', background: t.card, borderRadius: '12px', width: '220px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: `1px solid ${t.border}`, zIndex: 1000, padding: '8px' }}>

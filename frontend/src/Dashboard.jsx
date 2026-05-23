@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './Dashboard.css';
 
-// ─── Geo-Math & Probabilistic Digital Twin Engine ──────────────────────────────
+// ─── Geospatial Math ──────────
 const HUB_COORDS = [14.5866, 120.9630];
 
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
@@ -18,26 +18,49 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// Digital Twin: Simulates P90 ETA by overlaying external contextual streams
-const runDigitalTwinSimulation = (distKm, address, itemDescription) => {
+// ─── Live Weather Telemetry Engine ──────────────────────────────────────────
+const fetchLiveWeatherMultiplier = async (lat, lon) => {
+  if (!lat || !lon) return { weather: 1.0, context: "No Geodata: Default Weather" };
+
+  try {
+    const API_KEY = '2efe8fc4f4c2807debc7c4ebf9ac3e24'; 
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}`);
+    
+    if (!response.ok) throw new Error("API Connection Failed");
+    
+    const data = await response.json();
+    const condition = data.weather[0].main.toLowerCase();
+
+    if (condition === 'thunderstorm' || condition === 'squall' || condition === 'tornado') {
+      return { weather: 1.50, context: "Live API: Severe Weather / Storm Buffer" };
+    } else if (condition === 'rain' || condition === 'drizzle') {
+      return { weather: 1.35, context: "Live API: Wet Roads / Rain Buffer" };
+    } else if (condition === 'mist' || condition === 'fog' || condition === 'haze') {
+      return { weather: 1.20, context: "Live API: Low Visibility Buffer" };
+    }
+    
+    return { weather: 1.0, context: "Live API: Nominal Weather Conditions" };
+  } catch (error) {
+    console.error("Weather API offline or limit reached, falling back to nominal.", error);
+    return { weather: 1.0, context: "Weather API Offline (Fallback Nominal)" };
+  }
+};
+
+// ─── Digital Twin Simulator ─────────────────────────────────────────────────
+// Simulates P90 ETA by overlaying external contextual streams including live weather
+const runDigitalTwinSimulation = (distKm, address, itemDescription, liveWeatherObj) => {
   if (!distKm) return { p90Eta: 45, confidence: 'Moderate (70%)', contexts: ['Standard Model (No Geodata)'] };
   
   const baseSpeedKmH = 25; 
   let baseMins = (distKm / baseSpeedKmH) * 60;
   
-  let multipliers = { weather: 1.0, traffic: 1.0, event: 1.0, port: 1.0 };
-  let activeContexts = [];
+  // Dynamic Multipliers injected from APIs and Time Contexts
+  let multipliers = { weather: liveWeatherObj?.weather || 1.0, traffic: 1.0, event: 1.0, port: 1.0 };
+  let activeContexts = liveWeatherObj?.context ? [liveWeatherObj.context] : [];
+  
   const adr = (address || '').toLowerCase();
   const items = (itemDescription || '').toLowerCase();
 
-  // 1. Hyper-Local Weather (Flood Buffer)
-  // In a real app, this fetches from an API. We simulate flash flood zones.
-  if (adr.includes('espana') || adr.includes('taft') || adr.includes('marikina')) {
-    multipliers.weather = 1.35;
-    activeContexts.push("Weather API: High Flood Risk Buffer Applied");
-  }
-
-  // 2. Real-Time Traffic Layers
   const currentHour = new Date().getHours();
   if ((currentHour >= 7 && currentHour <= 10) || (currentHour >= 16 && currentHour <= 20)) {
     multipliers.traffic = 1.5;
@@ -47,14 +70,12 @@ const runDigitalTwinSimulation = (distKm, address, itemDescription) => {
     activeContexts.push("Traffic Layer: Known Bottleneck Zone");
   }
 
-  // 3. Public Event & Holiday Calendars (Payday Surges)
   const currentDay = new Date().getDate();
   if (currentDay === 15 || currentDay === 30 || currentDay === 31) {
     multipliers.event = 1.2;
     activeContexts.push("Calendar API: Payday Volume Surge");
   }
 
-  // 4. Port & Custom Status (Dwell Time)
   if (items.includes('container') || items.includes('bulk') || adr.includes('port') || adr.includes('pier')) {
     multipliers.port = 1.4;
     activeContexts.push("Terminal API: Elevated Port Dwell Time");
@@ -67,8 +88,6 @@ const runDigitalTwinSimulation = (distKm, address, itemDescription) => {
   const totalMultiplier = multipliers.weather * multipliers.traffic * multipliers.event * multipliers.port;
   const rawEta = Math.max(15, Math.ceil(baseMins * totalMultiplier));
 
-  // 5. Probabilistic P90 Forecasting
-  // Instead of passing a raw average, we add a 20% pessimistic buffer to guarantee the delivery window with 90% confidence.
   const p90Eta = Math.ceil(rawEta * 1.20);
   
   let confidence = 'High (>90%)';
@@ -79,23 +98,20 @@ const runDigitalTwinSimulation = (distKm, address, itemDescription) => {
 };
 
 function Dashboard() {
-  // --- 1. SYSTEM & DATA STATE ---
   const [deliveries, setDeliveries] = useState([]);
   const [stats, setStats] = useState({ pending: 0, outForDelivery: 0, delivered: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // --- 2. UI CONTROL STATE ---
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [selectedRows, setSelectedRows] = useState([]);
-  const [viewMode, setViewMode] = useState('list'); 
-  const [draggedItem, setDraggedItem] = useState(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showPriorityHelp, setShowPriorityHelp] = useState(false);
+  const [isCalculatingDispatch, setIsCalculatingDispatch] = useState(false);
   
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
 
@@ -104,8 +120,12 @@ function Dashboard() {
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
 
   const [autoPriorityTriggered, setAutoPriorityTriggered] = useState(false);
+  const [dispatchAlert, setDispatchAlert] = useState(null);
+  
+  // LIVE ADMIN NOTIFIER STATES
+  const prevDeliveriesRef = useRef([]);
+  const [successToast, setSuccessToast] = useState(null);
 
-  // --- 3. FORM STATE (Dynamic Item Spec) ---
   const [formData, setFormData] = useState({
     receiver_name: '',
     house_number: '',
@@ -129,7 +149,6 @@ function Dashboard() {
 
   const navigate = useNavigate();
 
-  // --- 4. AUTH & SESSION LOGIC ---
   const getUserSession = () => {
     try {
       const savedUser = localStorage.getItem('user');
@@ -140,7 +159,6 @@ function Dashboard() {
   };
   const user = getUserSession();
 
-  // --- THEME ENGINE ---
   const toggleTheme = () => {
     setIsDarkMode(prev => {
       const next = !prev;
@@ -167,9 +185,9 @@ function Dashboard() {
     hover: isDarkMode ? '#1e293b' : '#f1f5f9',
   };
 
-  // --- 5. DATA FETCHING ENGINE ---
-  const refreshDashboard = async () => {
-    setIsLoading(true);
+  // UPDATED TO ALLOW SILENT POLLING WITHOUT UI FLICKER
+  const refreshDashboard = async (isBackgroundPoll = false) => {
+    if (!isBackgroundPoll) setIsLoading(true);
     try {
       const [delRes, statRes] = await Promise.all([
         fetch('http://localhost:5000/api/deliveries'),
@@ -178,25 +196,44 @@ function Dashboard() {
       if (!delRes.ok || !statRes.ok) throw new Error('Database Sync Error');
       const delData = await delRes.json();
       const statData = await statRes.json();
-      setDeliveries(Array.isArray(delData) ? delData : []);
+      
+      const newDeliveries = Array.isArray(delData) ? delData : [];
+      setDeliveries(newDeliveries);
       setStats(statData || { pending: 0, outForDelivery: 0, delivered: 0 });
       setError(null);
     } catch (err) {
       setError("Comms link to backend severed.");
-      setDeliveries([]);
+      if (!isBackgroundPoll) setDeliveries([]);
     } finally {
-      setIsLoading(false);
+      if (!isBackgroundPoll) setIsLoading(false);
     }
   };
 
+  // SILENT POLLING ENGINE FOR AUTO-RESOLVE DETECTION
   useEffect(() => {
     refreshDashboard();
-    const handleResize = () => setIsSidebarOpen(window.innerWidth > 1024);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const interval = setInterval(() => refreshDashboard(true), 2500); 
+    return () => clearInterval(interval);
   }, []);
 
-  // --- 6. ADDRESS AUTO-COMPLETE ENGINE ---
+  // LIVE ADMIN NOTIFICATION ENGINE
+  useEffect(() => {
+    if (prevDeliveriesRef.current.length > 0 && deliveries.length > 0) {
+        deliveries.forEach(d => {
+            const prevD = prevDeliveriesRef.current.find(p => p.delivery_id === d.delivery_id);
+            // IF cargo was "Out for Delivery" and is now "Done" -> Auto-Resolved!
+            if (prevD && prevD.status === 'Out for Delivery' && d.status === 'Done') {
+                // Play notification from public folder
+                new Audio('/mixkit-bell-notification-933.wav').play().catch(() => console.log("Audio blocked by browser"));
+                setSuccessToast(`✅ AWB-${String(d.delivery_id).padStart(6, '0')} has been successfully delivered! Target secured.`);
+                setTimeout(() => setSuccessToast(null), 8000);
+            }
+        });
+    }
+    prevDeliveriesRef.current = deliveries;
+  }, [deliveries]);
+
+  // Geocoding via Debouncing
   useEffect(() => {
     if (addressQuery.length < 5) {
       setAddressSuggestions([]);
@@ -230,17 +267,15 @@ function Dashboard() {
     setAddressSuggestions([]);
   };
 
-  // --- 7. META-DRIVEN PRIORITY ALGORITHM ---
   useEffect(() => {
     if (!isModalOpen || formData.items.length === 0) {
       setAutoPriorityTriggered(false);
       return;
     }
-
+    // Priority Triage
     const determinePriority = (combinedText) => {
       const text = combinedText.toLowerCase();
 
-      // STRICT ATTRIBUTE OVERRIDES (Instant High)
       const tempFlags = ['chilled', 'frozen', 'temperature'];
       const safetyFlags = ['flammable', 'corrosive', 'hazardous', 'un number'];
       const handlingFlags = ['fragile', 'keep dry', 'do not stack'];
@@ -253,7 +288,6 @@ function Dashboard() {
         return 'High';
       }
 
-      // KEYWORD MATRICES
       const highKeywords = ['medical', 'vaccines', 'insulin', 'ppe', 'dialysis', 'syringes', 'catheters', 'iv fluid', 'gauze', 'cardiac monitor', 'defibrillator', 'stethoscope', 'antibiotics', 'antiseptics', 'emergency', 'aog', 'relief goods', 'first aid', 'fire extinguisher', 'oxygen tank', 'life vest', 'rescue rope', 'shelter kit', 'generator', 'blood bags', 'perishable', 'seafood', 'tuna', 'mangoes', 'pineapple', 'poultry', 'dairy', 'milk', 'butter', 'cheese', 'flowers', 'roses', 'sashimi', 'vegetables', 'contract', 'documents', 'bol', 'bill of lading', 'deeds', 'title', 'notarized', 'signed', 'passport', 'visa', 'tender', 'legal brief', 'corporate seal', 'bond', 'lab', 'reagents', 'specimens', 'samples', 'petri dish', 'microscope', 'centrifuge', 'test tubes', 'pipettes', 'chemical buffer', 'culture media', 'incubator', 'electronics', 'smartphone', 'laptop', 'gpu', 'cpu', 'ssd', 'motherboard', 'tablet', 'semiconductor', 'microchip', 'circuit board', 'ram', 'console'];
       const mediumKeywords = ['retail', 'apparel', 'jeans', 'sneakers', 't-shirts', 'cosmetics', 'lipstick', 'shampoo', 'perfume', 'toys', 'handbags', 'jewelry', 'watches', 'sporting goods', 'gym gear', 'appliance', 'tv', 'refrigerator', 'aircon', 'washer', 'dryer', 'microwave', 'electric fan', 'blender', 'rice cooker', 'oven', 'induction', 'vacuum cleaner', 'office', 'bond paper', 'printer', 'toner', 'ink', 'stationery', 'stapler', 'whiteboard', 'desk', 'ergonomic chair', 'filing cabinet', 'shredder', 'projector', 'inventory', 'sku', 'raw material', 'stock', 'warehouse replenishment', 'spare parts', 'fasteners', 'bolts', 'screws', 'packaging', 'canned goods', 'bottled water'];
       const lowKeywords = ['bulk', 'raw sugar', 'rice', 'corn', 'coal', 'scrap metal', 'mineral ore', 'cement', 'fertilizer', 'animal feed', 'wheat', 'flour', 'sand', 'gravel', 'aggregates', 'crushed stone', 'pebble', 'limestone', 'filling material', 'g1', 's1', 'silica', 'marketing', 'tarpaulin', 'banner', 'booth', 'flyer', 'brochure', 'standee', 'signage', 'merch', 'giveaways', 'tents', 'backdrop', 'stickers', 'storage', 'pallets', 'crates', 'empty container', 'archive box', 'racking', 'shelving', 'salvaged parts', 'old equipment', 'discarded assets'];
@@ -262,7 +296,7 @@ function Dashboard() {
       for (const word of mediumKeywords) if (text.includes(word)) return 'Medium';
       for (const word of lowKeywords) if (text.includes(word)) return 'Low';
       
-      return 'Medium'; // Default fallback
+      return 'Medium'; 
     };
 
     const combinedText = formData.items.map(i => i.description).join(' ');
@@ -275,7 +309,6 @@ function Dashboard() {
     }
   }, [formData.items, isModalOpen]);
 
-  // --- 8. ACTION HANDLERS ---
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
     newItems[index][field] = value;
@@ -312,13 +345,13 @@ function Dashboard() {
     const finalAddress = formData.house_number ? `${formData.house_number}, ${formData.address}` : formData.address;
     const aggregatedItems = formData.items
       .filter(i => i.description.trim() !== '')
-      .map(i => `${i.qty}x ${i.description}`)
+      .map(i => `${i.qty}x Box(es) containing ${i.description}`)
       .join(', ');
 
     const payload = {
       ...formData,
       address: finalAddress,
-      item_name: aggregatedItems || 'General Cargo'
+      item_name: aggregatedItems || 'General Cargo Boxes'
     };
 
     try {
@@ -343,8 +376,8 @@ function Dashboard() {
     }
   };
 
-  // SMART DISPATCH AI (Digital Twin Integrated)
-  const getVehicleRecommendation = (delivery) => {
+  // Fleet Recommendation Engine
+  const getVehicleRecommendation = async (delivery) => {
     if (!delivery) return { type: 'Close Van', reason: 'Standard load.', p90Eta: 45, confidence: 'Moderate', contexts: [] };
     const text = (delivery.item_name || '').toLowerCase();
     
@@ -356,21 +389,25 @@ function Dashboard() {
 
     if (delivery.latitude && delivery.longitude) {
        dist = getDistanceFromLatLonInKm(HUB_COORDS[0], HUB_COORDS[1], parseFloat(delivery.latitude), parseFloat(delivery.longitude));
-       etaForecasting = runDigitalTwinSimulation(dist, delivery.address, delivery.item_name);
+       
+       // Async Fetch for Live Weather
+       const liveWeather = await fetchLiveWeatherMultiplier(delivery.latitude, delivery.longitude);
+       
+       etaForecasting = runDigitalTwinSimulation(dist, delivery.address, delivery.item_name, liveWeather);
     }
 
     let recType = 'Close Van';
-    let recReason = 'Optimal for secure standard transit.';
+    let recReason = `Optimal for secure standard transit (${totalQty} boxes).`;
 
     if (text.includes('bulk') || text.includes('construction') || text.includes('gravel') || text.includes('coal') || totalQty >= 100) {
       recType = 'Prime Mover';
-      recReason = `Heavy/bulk payload detected (${totalQty} units).`;
+      recReason = `Heavy/bulk payload detected (${totalQty} boxes).`;
     } else if (text.includes('furniture') || text.includes('appliance') || totalQty >= 30) {
       recType = 'Wing Van';
-      recReason = `High volume cargo capacity required (${totalQty} units).`;
-    } else if (dist && dist < 15 && totalQty <= 5 && !text.includes('fragile') && !text.includes('medical') && !text.includes('equipment')) {
+      recReason = `High volume cargo capacity required (${totalQty} boxes).`;
+    } else if (dist && dist < 15 && totalQty === 1 && !text.includes('fragile') && !text.includes('medical') && !text.includes('equipment')) {
       recType = 'Motorcycle';
-      recReason = `Short distance (${Math.round(dist)}km) and light load.`;
+      recReason = `Short distance (${Math.round(dist)}km) and strict 1-box limit.`;
     }
 
     return { 
@@ -381,11 +418,14 @@ function Dashboard() {
     };
   };
 
-  const openDispatchModal = (deliveryId) => {
+  const openDispatchModal = async (deliveryId) => {
+    setIsCalculatingDispatch(true);
+    setDispatchAlert(null); // Clear any old alerts
+    
     const selected = deliveries.find(d => d.delivery_id === deliveryId);
     setDispatchDelivery(selected);
     
-    const recommendation = getVehicleRecommendation(selected);
+    const recommendation = await getVehicleRecommendation(selected);
     setVehicleRecommendation(recommendation);
 
     setDispatchData(prev => ({ 
@@ -393,9 +433,23 @@ function Dashboard() {
       delivery_id: deliveryId,
       vehicle_type: recommendation.type 
     }));
+    
+    setIsCalculatingDispatch(false);
     setIsDispatchModalOpen(true);
   };
 
+  // Enforces the strict vehicle selection
+  const handleVehicleTypeChange = (e) => {
+    const selectedType = e.target.value;
+    if (vehicleRecommendation && selectedType !== vehicleRecommendation.type) {
+      setDispatchAlert(`System Override Denied: Cargo specifications strictly require a ${vehicleRecommendation.type}.`);
+    } else {
+      setDispatchAlert(null);
+      setDispatchData(prev => ({ ...prev, vehicle_type: selectedType }));
+    }
+  };
+
+  // Relational Database Emulation and State Management
   const handleDispatch = async (e) => {
     e.preventDefault();
     if (!dispatchData.delivery_id) return alert("System Error: Freight ID lost.");
@@ -428,6 +482,7 @@ function Dashboard() {
       if (!cargoRes.ok) throw new Error("Could not update cargo status.");
       
       setIsDispatchModalOpen(false);
+      setDispatchAlert(null);
       setDispatchData({ delivery_id: '', plate_number: '', vehicle_type: 'Prime Mover', driver_name: '' });
       await refreshDashboard();
     } catch (err) { alert(`Dispatch Aborted: ${err.message}`); }
@@ -464,14 +519,6 @@ function Dashboard() {
     }
   };
 
-  const handleDragStart = (e, item) => { setDraggedItem(item); e.dataTransfer.effectAllowed = 'move'; };
-  const handleDrop = (e, newStatus) => {
-    e.preventDefault();
-    if (!draggedItem || draggedItem.status === newStatus) return;
-    handleStatusUpdate(draggedItem.delivery_id, newStatus);
-    setDraggedItem(null);
-  };
-
   const priorityWeight = { 'High': 3, 'Medium': 2, 'Low': 1 };
   const filteredDeliveries = Array.isArray(deliveries) ? deliveries
     .filter(d => {
@@ -502,8 +549,15 @@ function Dashboard() {
   return (
     <div className={`fw-layout ${!isSidebarOpen ? 'sidebar-closed' : ''}`} style={{ background: t.bg, color: t.text1, transition: 'all 0.3s ease' }}>
       
-      {/* ✅ UNIFIED MASTER CSS WITH ENHANCED DARK MODE PIPELINE */}
+      {/* ADMIN FLOATING SUCCESS TOAST */}
+      {successToast && (
+        <div style={{ position: 'fixed', top: '24px', right: '50%', transform: 'translateX(50%)', background: '#10b981', color: 'white', padding: '16px 32px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', boxShadow: '0 10px 25px -5px rgba(16,185,129,0.4)', zIndex: 9999, animation: 'slideDown 0.4s ease forwards' }}>
+          {successToast}
+        </div>
+      )}
+
       <style>{`
+        @keyframes slideDown { from { top: -50px; opacity: 0; } to { top: 24px; opacity: 1; } }
         .fw-sidebar { background: ${isDarkMode ? '#020617' : '#0f172a'} !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#0f172a'} !important; transition: all 0.3s ease; }
         .fw-brand h2 { color: white !important; }
         .fw-brand span { color: #94a3b8 !important; }
@@ -532,14 +586,35 @@ function Dashboard() {
         .table-row-hover:hover td { background: ${isDarkMode ? '#1e293b' : '#f8fafc'} !important; }
         .cell-id, .cell-secondary, .card-cargo { color: ${t.text2} !important; }
         
-        /* ✅ IMPROVED DARK MODE PIPELINE CONTRAST */
-        .fw-board-column { background: ${isDarkMode ? '#0f172a' : '#f1f5f9'} !important; border: 1px solid ${isDarkMode ? '#1e293b' : t.border} !important; }
-        .fw-board-card { background: ${isDarkMode ? '#1e293b' : 'white'} !important; border: 1px solid ${isDarkMode ? '#334155' : t.border} !important; box-shadow: ${isDarkMode ? '0 4px 6px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.05)'}; transition: border-color 0.2s; }
-        .fw-board-card:hover { border-color: ${isDarkMode ? '#475569' : '#cbd5e1'} !important; }
-        .fw-board-card .card-client { color: ${t.text1} !important; }
-        .fw-board-card .card-cargo { color: ${isDarkMode ? '#cbd5e1' : '#64748b'} !important; }
-        .fw-board-card .card-dest { color: ${isDarkMode ? '#94a3b8' : '#64748b'} !important; background: transparent !important; }
-        .fw-board-card .card-footer { border-top-color: ${isDarkMode ? '#334155' : t.border} !important; background: transparent !important; }
+        /* STRICT ALIGNMENT FOR ACTIONS COLUMN */
+        .fw-table th.col-actions, .fw-table td.col-actions {
+          text-align: right !important;
+          padding-right: 24px !important;
+        }
+
+        .fw-actions { 
+          display: flex; 
+          align-items: center; 
+          justify-content: flex-end; 
+          gap: 8px; 
+          width: 100%; 
+          margin: 0;
+          padding: 0;
+        }
+
+        .fw-btn-icon { 
+          display: flex; 
+          align-items: center; 
+          justify-content: center; 
+          background: transparent; 
+          border: none; 
+          font-size: 14px; 
+          padding: 4px 0 4px 4px !important; /* Removes right padding so visual edge is flush */
+          cursor: pointer; 
+          transition: color 0.2s; 
+        }
+        .fw-btn-icon:hover { color: #ef4444 !important; }
+        .fw-select-minimal { padding: 4px 8px; border-radius: 6px; font-size: 12px; outline: none; cursor: pointer; }
 
         .fw-modal { background: ${t.card} !important; border: 1px solid ${t.border} !important; color: ${t.text1} !important; }
         .modal-header { border-bottom: 1px solid ${t.border} !important; }
@@ -557,10 +632,6 @@ function Dashboard() {
         .profile-dropdown-menu button.text-danger { color: #ef4444 !important; }
         .profile-dropdown-menu button:hover, .theme-btn:hover { background: ${t.hover} !important; }
 
-        .view-toggles { background: ${isDarkMode ? '#1e293b' : '#f1f5f9'} !important; border: 1px solid ${t.border} !important; }
-        .view-btn.active { background: ${isDarkMode ? '#0f172a' : 'white'} !important; box-shadow: ${isDarkMode ? '0 4px 6px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'} !important; }
-
-        /* ITEM SPECIFICATION UI */
         .item-spec-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
         .item-spec-qty { width: 80px !important; }
         .btn-add-item { background: transparent; color: #2563eb; border: 1px dashed #2563eb; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; width: 100%; margin-top: 4px; }
@@ -570,9 +641,6 @@ function Dashboard() {
 
       <aside className="fw-sidebar">
         <div className="fw-brand">
-          <div className="brand-logo-container">
-            <img src="/gilffc-logo-globe.png" alt="GILFFC" />
-          </div>
           <div className="brand-titles">
             <h2>GILFFC</h2>
             <span>Logistics OS</span>
@@ -582,25 +650,25 @@ function Dashboard() {
           <span className="nav-label" style={{ color: t.text3 }}>Core Operations</span>
           <nav className="fw-nav">
             <button className="nav-btn active" onClick={() => navigate('/dashboard')}>
-              <span className="icon">◈</span> Command Center
+              Command Center
             </button>
             <button className="nav-btn" onClick={() => navigate('/customer-service')}>
-              <span className="icon">⌗</span> Comms Terminal
+              Comms Terminal
             </button>
             <button className="nav-btn" onClick={() => navigate('/fleet-assets')}>
-              <span className="icon">▤</span> Fleet Assets
+              Fleet Assets
             </button>
             <button className="nav-btn" onClick={() => navigate('/analytics')}>
-              <span className="icon">◓</span> Analytics
+              Analytics
             </button>
             <button className="nav-btn" onClick={() => navigate('/account-management')}>
-              <span className="icon">⌖</span> Account Settings
+              Account Settings
             </button>
           </nav>
         </div>
         <div className="fw-sidebar-bottom">
           <button className="nav-btn text-danger" onClick={handleLogout}>
-            <span className="icon">⇁</span> Secure Logout
+            Secure Logout
           </button>
         </div>
       </aside>
@@ -633,19 +701,13 @@ function Dashboard() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
               )}
             </button>
-            <button className="fw-icon-btn">◈</button>
+            
             <div style={{ position: 'relative' }}>
               <div className="fw-profile hover-pointer" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}>
                 <div className="profile-text">
                   <span className="name" style={{ color: t.text1 }}>{user.name || 'Alfrancis'}</span>
                   <span className="role" style={{ color: t.text2 }}>{user.role || 'Administrator'}</span>
                 </div>
-                <img 
-                  src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} 
-                  alt="Profile" 
-                  style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover', background: '#e2e8f0' }} 
-                  onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} 
-                />
               </div>
               {isProfileMenuOpen && (
                 <div className="profile-dropdown-menu">
@@ -714,17 +776,9 @@ function Dashboard() {
             <div className="panel-header">
               <div className="panel-title-group">
                 <h3>Freight Manifest</h3>
-                <div className="view-toggles">
-                  <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} style={viewMode === 'list' ? { color: isDarkMode ? '#38bdf8' : '#2563eb' } : { color: t.text2 }} onClick={() => setViewMode('list')}>
-                    <span className="icon">≣</span> List
-                  </button>
-                  <button className={`view-btn ${viewMode === 'board' ? 'active' : ''}`} style={viewMode === 'board' ? { color: isDarkMode ? '#38bdf8' : '#2563eb' } : { color: t.text2 }} onClick={() => setViewMode('board')}>
-                    <span className="icon">◫</span> Pipeline
-                  </button>
-                </div>
               </div>
               <div className="panel-actions">
-                 {selectedRows.length > 0 && viewMode === 'list' && (
+                 {selectedRows.length > 0 && (
                  <>
                    <span className="selection-count" style={{ color: t.text2 }}>{selectedRows.length} selected</span>
                    <button className="fw-btn-outline" style={{color: '#dc2626', borderColor: '#fca5a5', background: isDarkMode ? 'rgba(239,68,68,0.1)' : 'transparent'}} onClick={handleBulkDelete}>✕ Purge Selected</button>
@@ -734,103 +788,71 @@ function Dashboard() {
               </div>
             </div>
             
-            {viewMode === 'list' ? (
-              <div className="table-scroll fade-in">
-                <table className="fw-table">
-                  <thead>
-                    <tr>
-                      <th className="checkbox-cell">
-                        <input type="checkbox" className="fw-checkbox" onChange={handleSelectAll} checked={selectedRows.length === filteredDeliveries.length && filteredDeliveries.length > 0} />
-                      </th>
-                      <th>Waybill ID</th>
-                      <th>Consignee</th>
-                      <th>Destination</th>
-                      <th>Cargo Details</th>
-                      <th>Priority</th>
-                      <th>Network Status</th>
-                      <th className="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDeliveries.length > 0 ? filteredDeliveries.map((d, index) => (
-                      <tr key={d.delivery_id} className={`animate-row ${selectedRows.includes(d.delivery_id) ? 'row-selected' : 'table-row-hover'}`} style={{ animationDelay: `${0.05 * index}s`, background: selectedRows.includes(d.delivery_id) ? (isDarkMode ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent' }}>
-                        <td className="checkbox-cell">
-                          <input type="checkbox" className="fw-checkbox" checked={selectedRows.includes(d.delivery_id)} onChange={() => handleSelectRow(d.delivery_id)} />
-                        </td>
-                        <td className="cell-id" style={{ color: t.text2 }}>AWB-{d.delivery_id.toString().padStart(6, '0')}</td>
-                        <td className="cell-primary">{d.receiver_name}</td>
-                        <td className="cell-secondary" style={{ color: t.text2 }}>{d.address}</td>
-                        <td className="cell-secondary" style={{ color: t.text2 }}>
-                          {/* Truncate long item lists for table view */}
-                          {d.item_name && d.item_name.length > 40 ? `${d.item_name.substring(0, 40)}...` : d.item_name}
-                        </td>
-                        <td className="cell-secondary">
-                           <span className={`fw-badge prio-${(d.priority || 'medium').toLowerCase()}`}>
-                             {d.priority || 'Medium'}
-                           </span>
-                        </td>
-                        <td>
-                          <span className={`fw-badge badge-${(d.status || 'pending').toLowerCase().replace(/ /g, '-')}`}>
-                            {d.status}
+            <div className="table-scroll fade-in">
+              <table className="fw-table">
+                <thead>
+                  <tr>
+                    <th className="checkbox-cell">
+                      <input type="checkbox" className="fw-checkbox" onChange={handleSelectAll} checked={selectedRows.length === filteredDeliveries.length && filteredDeliveries.length > 0} />
+                    </th>
+                    <th>Waybill ID</th>
+                    <th>Consignee</th>
+                    <th>Destination</th>
+                    <th>Cargo Details</th>
+                    <th>Priority</th>
+                    <th>Network Status</th>
+                    <th className="col-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDeliveries.length > 0 ? filteredDeliveries.map((d, index) => (
+                    <tr key={d.delivery_id} className={`animate-row ${selectedRows.includes(d.delivery_id) ? 'row-selected' : 'table-row-hover'}`} style={{ animationDelay: `${0.05 * index}s`, background: selectedRows.includes(d.delivery_id) ? (isDarkMode ? 'rgba(37,99,235,0.1)' : '#eff6ff') : 'transparent' }}>
+                      <td className="checkbox-cell">
+                        <input type="checkbox" className="fw-checkbox" checked={selectedRows.includes(d.delivery_id)} onChange={() => handleSelectRow(d.delivery_id)} />
+                      </td>
+                      <td className="cell-id" style={{ color: t.text2 }}>AWB-{d.delivery_id.toString().padStart(6, '0')}</td>
+                      <td className="cell-primary">{d.receiver_name}</td>
+                      <td className="cell-secondary" style={{ color: t.text2 }}>{d.address}</td>
+                      <td className="cell-secondary" style={{ color: t.text2 }}>
+                        {d.item_name && d.item_name.length > 40 ? `${d.item_name.substring(0, 40)}...` : d.item_name}
+                      </td>
+                      <td className="cell-secondary">
+                          <span className={`fw-badge prio-${(d.priority || 'medium').toLowerCase()}`}>
+                            {d.priority || 'Medium'}
                           </span>
-                        </td>
-                        <td>
-                          <div className="fw-actions">
-                            {d.status === 'Pending' && (
-                              <button className="fw-btn-primary" style={{padding: '6px 12px', fontSize: '11px', marginRight: '8px'}} onClick={() => openDispatchModal(d.delivery_id)}>
-                                Dispatch
-                              </button>
-                            )}
-                            <select className="fw-select-minimal" style={{ background: t.inputBg, color: t.text1, border: `1px solid ${t.border}` }} value={d.status} onChange={(e) => handleStatusUpdate(d.delivery_id, e.target.value)}>
-                              <option value="Pending">Pending</option>
-                              <option value="Out for Delivery">In Transit</option>
-                              <option value="Done">Delivered</option>
-                            </select>
-                            <button className="fw-btn-icon" style={{ color: t.text3 }} onClick={() => handleDelete(d.delivery_id)} title="Purge Record">✕</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="8" className="empty-table" style={{ color: t.text3 }}>No active freight data matching criteria.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="fw-board-layout fade-in">
-                {['Pending', 'Out for Delivery', 'Done'].map(columnStatus => (
-                  <div key={columnStatus} className="fw-board-column" onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, columnStatus)}>
-                    <div className="column-header">
-                      <span className="column-title">{columnStatus === 'Done' ? 'Delivered' : columnStatus === 'Out for Delivery' ? 'In Transit' : 'Awaiting Dispatch'}</span>
-                      <span className="column-count" style={{ background: t.card, color: t.text1, border: `1px solid ${t.border}` }}>{filteredDeliveries.filter(d => d.status === columnStatus).length}</span>
-                    </div>
-                    <div className="column-body">
-                      {filteredDeliveries.filter(d => d.status === columnStatus).map(d => (
-                        <div key={d.delivery_id} className="fw-board-card" draggable onDragStart={(e) => handleDragStart(e, d)}>
-                          <div className="card-top">
-                            <span className="cell-id" style={{ color: t.text2 }}>AWB-{d.delivery_id.toString().padStart(6, '0')}</span>
-                            <span className={`priority-tag p-${(d.priority || 'medium').toLowerCase()}`}>{d.priority || 'Medium'}</span>
-                          </div>
-                          <h4 className="card-client">{d.receiver_name}</h4>
-                          <p className="card-cargo">{d.item_name && d.item_name.length > 30 ? `${d.item_name.substring(0, 30)}...` : d.item_name}</p>
-                          <div className="card-footer"><span className="card-dest" style={{ color: t.text3 }}>⚲ {d.address}</span></div>
+                      </td>
+                      <td>
+                        <span className={`fw-badge badge-${(d.status || 'pending').toLowerCase().replace(/ /g, '-')}`}>
+                          {d.status}
+                        </span>
+                      </td>
+                      <td className="col-actions">
+                        <div className="fw-actions">
                           {d.status === 'Pending' && (
-                            <button className="fw-btn-primary" style={{width: '100%', marginTop: '12px', padding: '6px'}} onClick={() => openDispatchModal(d.delivery_id)}>
-                              Assign Vehicle
+                            <button className="fw-btn-primary" style={{padding: '6px 12px', fontSize: '11px'}} onClick={() => openDispatchModal(d.delivery_id)} disabled={isCalculatingDispatch}>
+                              {isCalculatingDispatch && dispatchDelivery?.delivery_id === d.delivery_id ? 'Syncing...' : 'Dispatch'}
                             </button>
                           )}
+                          <select className="fw-select-minimal" style={{ background: t.inputBg, color: t.text1, border: `1px solid ${t.border}` }} value={d.status} onChange={(e) => handleStatusUpdate(d.delivery_id, e.target.value)}>
+                            <option value="Pending">Pending</option>
+                            <option value="Out for Delivery">In Transit</option>
+                            <option value="Done">Delivered</option>
+                          </select>
+                          <button className="fw-btn-icon" style={{ color: t.text3 }} onClick={() => handleDelete(d.delivery_id)} title="Purge Record">✕</button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan="8" className="empty-table" style={{ color: t.text3 }}>No active freight data matching criteria.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </main>
 
-      {/* ✅ GENERATE WAYBILL MODAL WITH ADD/DROP ITEMS */}
+      {/* GENERATE WAYBILL MODAL */}
       {isModalOpen && (
         <div className="fw-modal-overlay fade-in">
           <div className="fw-modal slide-in" style={{ maxWidth: '600px', width: '90%' }}>
@@ -940,16 +962,15 @@ function Dashboard() {
         </div>
       )}
 
-      {/* ✅ DISPATCH MODAL WITH VEHICLE & DIGITAL TWIN ETA RECOMMENDATION ENGINE */}
+      {/* ✅ DISPATCH MODAL */}
       {isDispatchModalOpen && (
         <div className="fw-modal-overlay fade-in">
           <div className="fw-modal slide-in">
             <div className="modal-header">
               <h2>Assign Fleet Unit</h2>
-              <button className="fw-icon-btn" onClick={() => setIsDispatchModalOpen(false)}>✕</button>
+              <button className="fw-icon-btn" onClick={() => { setIsDispatchModalOpen(false); setDispatchAlert(null); }}>✕</button>
             </div>
             
-            {/* AI Recommendation & Route Forecast Banner */}
             {vehicleRecommendation && (
               <div style={{ background: isDarkMode ? 'rgba(37,99,235,0.1)' : '#eff6ff', padding: '16px 24px', borderBottom: `1px solid ${isDarkMode ? 'rgba(37,99,235,0.2)' : '#bfdbfe'}`, display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                 <div style={{ fontSize: '20px', color: '#38bdf8' }}>◈</div>
@@ -982,6 +1003,12 @@ function Dashboard() {
             )}
 
             <div className="modal-body">
+              {dispatchAlert && (
+                <div style={{ background: isDarkMode ? 'rgba(239,68,68,0.1)' : '#fef2f2', color: '#ef4444', padding: '12px', borderRadius: '8px', border: '1px solid #fca5a5', marginBottom: '16px', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>⚠</span> {dispatchAlert}
+                </div>
+              )}
+
               <form onSubmit={handleDispatch} className="fw-form">
                 <div className="form-row">
                   <div className="form-group half">
@@ -990,7 +1017,7 @@ function Dashboard() {
                   </div>
                   <div className="form-group half">
                     <label>Vehicle Type</label>
-                    <select className="fw-select" value={dispatchData.vehicle_type} onChange={e => setDispatchData(prev => ({...prev, vehicle_type: e.target.value}))}>
+                    <select className="fw-select" value={dispatchData.vehicle_type} onChange={handleVehicleTypeChange}>
                       <option value="Prime Mover">Prime Mover</option>
                       <option value="Wing Van">Wing Van</option>
                       <option value="Close Van">Close Van</option>
@@ -1003,7 +1030,7 @@ function Dashboard() {
                   <input type="text" placeholder="Driver Full Name" value={dispatchData.driver_name} onChange={e => setDispatchData(prev => ({...prev, driver_name: e.target.value}))} required />
                 </div>
                 <div className="modal-footer">
-                  <button type="button" className="fw-btn-ghost" style={{ color: t.text2 }} onClick={() => setIsDispatchModalOpen(false)}>Cancel</button>
+                  <button type="button" className="fw-btn-ghost" style={{ color: t.text2 }} onClick={() => { setIsDispatchModalOpen(false); setDispatchAlert(null); }}>Cancel</button>
                   <button type="submit" className="fw-btn-primary">Launch Unit</button>
                 </div>
               </form>

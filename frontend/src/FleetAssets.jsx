@@ -11,18 +11,41 @@ const ROUTE_COLORS = [
   '#8b5cf6', '#06b6d4', '#f97316', '#ec4899'
 ];
 
+// ─── Live Weather Telemetry Engine ──────────────────────────────────────────
+const fetchLiveWeatherMultiplier = async (lat, lon) => {
+  if (!lat || !lon) return { weather: 1.0, context: "No Geodata: Default Weather" };
+
+  try {
+    const API_KEY = '2efe8fc4f4c2807debc7c4ebf9ac3e24'; 
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}`);
+    
+    if (!response.ok) throw new Error("API Connection Failed");
+    
+    const data = await response.json();
+    const condition = data.weather[0].main.toLowerCase();
+
+    if (condition === 'thunderstorm' || condition === 'squall' || condition === 'tornado') {
+      return { weather: 1.50, context: "Live API: Severe Weather / Storm Buffer" };
+    } else if (condition === 'rain' || condition === 'drizzle') {
+      return { weather: 1.35, context: "Live API: Wet Roads / Rain Buffer" };
+    } else if (condition === 'mist' || condition === 'fog' || condition === 'haze') {
+      return { weather: 1.20, context: "Live API: Low Visibility Buffer" };
+    }
+    
+    return { weather: 1.0, context: "Live API: Nominal Weather Conditions" };
+  } catch (error) {
+    console.error("Weather API offline or limit reached, falling back to nominal.", error);
+    return { weather: 1.0, context: "Weather API Offline (Fallback Nominal)" };
+  }
+};
+
 // ─── Digital Twin Anticipation Engine (Synced with Dashboard V3.0) ────────────
-const runDigitalTwinMultiplier = (address, itemDescription) => {
-  let multipliers = { weather: 1.0, traffic: 1.0, event: 1.0, port: 1.0 };
+const runDigitalTwinMultiplier = (address, itemDescription, liveWeatherObj) => {
+  let multipliers = { weather: liveWeatherObj?.weather || 1.0, traffic: 1.0, event: 1.0, port: 1.0 };
   const adr = (address || '').toLowerCase();
   const items = (itemDescription || '').toLowerCase();
 
-  // 1. Hyper-Local Weather (Flood Buffer)
-  if (adr.includes('espana') || adr.includes('taft') || adr.includes('marikina')) {
-    multipliers.weather = 1.35;
-  }
-
-  // 2. Real-Time Traffic Layers
+  // 1. Real-Time Traffic Layers
   const currentHour = new Date().getHours();
   if ((currentHour >= 7 && currentHour <= 10) || (currentHour >= 16 && currentHour <= 20)) {
     multipliers.traffic = 1.5;
@@ -30,13 +53,13 @@ const runDigitalTwinMultiplier = (address, itemDescription) => {
     multipliers.traffic = 1.25;
   }
 
-  // 3. Public Event & Holiday Calendars (Payday Surges)
+  // 2. Public Event & Holiday Calendars (Payday Surges)
   const currentDay = new Date().getDate();
   if (currentDay === 15 || currentDay === 30 || currentDay === 31) {
     multipliers.event = 1.2;
   }
 
-  // 4. Port & Custom Status (Dwell Time)
+  // 3. Port & Custom Status (Dwell Time)
   if (items.includes('container') || items.includes('bulk') || adr.includes('port') || adr.includes('pier')) {
     multipliers.port = 1.4;
   }
@@ -79,7 +102,7 @@ function FleetAssets() {
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // ✅ UNIFIED DARK MODE STATE
+  // UNIFIED DARK MODE STATE
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
 
   const toggleTheme = () => {
@@ -143,7 +166,12 @@ function FleetAssets() {
 
   const fetchRoute = useCallback(async (delivery, colorIdx) => {
     const dest = getDestinationCoords(delivery);
-    const trafficMultiplier = runDigitalTwinMultiplier(delivery.address, delivery.item_name);
+    
+    // Fetch Live Weather via API
+    const liveWeather = await fetchLiveWeatherMultiplier(dest[0], dest[1]);
+    
+    // Pass Live Weather into Digital Twin Simulator
+    const trafficMultiplier = runDigitalTwinMultiplier(delivery.address, delivery.item_name, liveWeather);
     
     // Retrieve true timeline
     const savedProgress = JSON.parse(localStorage.getItem('fleet_realtime_v2') || '{}');
@@ -187,7 +215,8 @@ function FleetAssets() {
           etaMins: remainingMins,
           totalEstimatedTime: totalAdjustedTime,
           arrived: remainingMins <= 0,
-          isCompleting: false
+          isCompleting: false,
+          activeContexts: [liveWeather.context] // Expose weather context to UI
         };
       }
     } catch (_) {}
@@ -202,7 +231,8 @@ function FleetAssets() {
       etaMins: 45,
       totalEstimatedTime: 45,
       arrived: false,
-      isCompleting: false
+      isCompleting: false,
+      activeContexts: ["No Telemetry"]
     };
   }, []);
 
@@ -386,7 +416,7 @@ function FleetAssets() {
 
   // Only show active vehicles on this board
   const activeVehicles = vehicles.filter(
-    v => ['In Transit', 'Out for Delivery', 'En Route'].includes(v.status)
+    v => ['In Transit', 'Out for Delivery', 'En En Route'].includes(v.status)
   );
 
   // --- Unified Dispatch Roster ------------------------------------------------
@@ -544,9 +574,6 @@ function FleetAssets() {
 
       <aside className="fw-sidebar">
         <div className="fw-brand">
-          <div className="brand-logo-container">
-            <img src="/gilffc-logo-globe.png" alt="GILFFC" />
-          </div>
           <div className="brand-titles">
             <h2>GILFFC</h2>
             <span>Logistics OS</span>
@@ -557,26 +584,26 @@ function FleetAssets() {
           <span className="nav-label" style={{ fontSize: '11px' }}>Core Operations</span>
           <nav className="fw-nav">
             <button className="nav-btn" onClick={() => navigate('/dashboard')}>
-              <span className="icon">◈</span> Command Center
+              Command Center
             </button>
             <button className="nav-btn" onClick={() => navigate('/customer-service')}>
-              <span className="icon">⌗</span> Comms Terminal
+              Comms Terminal
             </button>
             <button className="nav-btn active" onClick={() => navigate('/fleet-assets')}>
-              <span className="icon">▤</span> Fleet Assets
+              Fleet Assets
             </button>
             <button className="nav-btn" onClick={() => navigate('/analytics')}>
-              <span className="icon">◓</span> Analytics
+              Analytics
             </button>
             <button className="nav-btn" onClick={() => navigate('/account-management')}>
-              <span className="icon">⌖</span> Account Settings
+              Account Settings
             </button>
           </nav>
         </div>
 
         <div className="fw-sidebar-bottom">
           <button className="nav-btn text-danger" onClick={handleLogout}>
-            <span className="icon">⇁</span> Secure Logout
+            Secure Logout
           </button>
         </div>
       </aside>
@@ -604,15 +631,9 @@ function FleetAssets() {
             <div style={{ position: 'relative' }}>
               <div className="fw-profile hover-pointer" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}>
                 <div className="profile-text">
-                  <span className="name" style={{ color: t.text1 }}>{user.name || 'Alfrancis'}</span>
-                  <span className="role" style={{ color: t.text2 }}>{user.role || 'Operations Lead'}</span>
+                  <span className="name" style={{ fontSize: '14px', fontWeight: '800', color: t.text1 }}>{user.name || 'Alfrancis'}</span>
+                  <span className="role" style={{ fontSize: '11px', fontWeight: '600', color: t.text2 }}>{user.role || 'Operations Lead'}</span>
                 </div>
-                <img 
-                  src={localStorage.getItem('user_avatar') || '/avatar-placeholder.png'} 
-                  alt="Profile" 
-                  style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover', background: '#e2e8f0' }} 
-                  onError={(e) => { e.target.onerror = null; e.target.src = '/avatar-placeholder.png'; }} 
-                />
               </div>
               {isProfileMenuOpen && (
                 <div className="profile-dropdown-menu" style={{ position: 'absolute', right: 0, top: '100%', marginTop: '12px', background: t.card, borderRadius: '12px', width: '220px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', border: `1px solid ${t.border}`, zIndex: 1000, padding: '8px' }}>
@@ -709,7 +730,7 @@ function FleetAssets() {
                                     <span style={{ fontSize: '16px', fontWeight: '800', color: tracked.arrived ? '#10b981' : t.text1 }}>
                                       {tracked.arrived ? 'ARRIVED' : `${tracked.etaMins} mins`}
                                     </span>
-                                    {/* ✅ GRANULAR TRAFFIC WARNINGS SYNCED WITH DIGITAL TWIN MULTIPLIER */}
+                                    {/* GRANULAR TRAFFIC WARNINGS SYNCED WITH DIGITAL TWIN MULTIPLIER */}
                                     <span style={{ fontSize: '10px', fontWeight: '700', color: tracked.arrived ? '#10b981' : (tracked.trafficFactor >= 1.8 ? '#ef4444' : (tracked.trafficFactor >= 1.3 ? '#f59e0b' : '#64748b')) }}>
                                       {tracked.arrived ? 'DOCKING SEQUENCE' : (tracked.trafficFactor >= 1.8 ? '⚠ SEVERE DELAYS' : (tracked.trafficFactor >= 1.3 ? '⚠ ROUTE CONGESTION' : '◈ NOMINAL ROUTE'))}
                                     </span>
@@ -787,6 +808,11 @@ function FleetAssets() {
                           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{del.arrived ? 'Unloading Cargo' : 'Terminal Progress'}</span>
                           <span style={{ fontSize: '12px', fontWeight: '800', color: del.arrived ? '#10b981' : t.text1 }}>{pct}%</span>
                         </div>
+                        {del.activeContexts && del.activeContexts.map((ctx, i) => (
+                           <div key={i} style={{ fontSize: '11px', color: t.text2, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '8px', borderTop: `1px solid ${t.border}` }}>
+                             <span style={{ color: '#2563eb' }}>⌖</span> {ctx}
+                           </div>
+                        ))}
                       </div>
                     );
                   })}

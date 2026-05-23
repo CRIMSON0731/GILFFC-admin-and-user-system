@@ -2,6 +2,41 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
+// ─── GILFFC Hub Origin & Google Maps Config ─────────────────────────────────
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDJvIQon878_VcstOhV-Z5IqDqerFZtIVA'; 
+const GILFFC_HUB_ADDRESS = 'GILFFC Global Distribution Hub, Manila, Philippines';
+
+// ─── Live Weather Telemetry Engine ──────────────────────────────────────────
+const fetchLiveWeatherContext = async (lat, lon) => {
+  // Fallback to Hub coords (Manila) if cargo geodata is missing
+  const queryLat = lat || 14.5866;
+  const queryLon = lon || 120.9630;
+  
+  try {
+    
+    const API_KEY = '2efe8fc4f4c2807debc7c4ebf9ac3e24'; 
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${queryLat}&lon=${queryLon}&appid=${API_KEY}`);
+    
+    if (!response.ok) throw new Error("API Connection Failed");
+    
+    const data = await response.json();
+    const condition = data.weather[0].main.toLowerCase();
+
+    if (condition === 'thunderstorm' || condition === 'squall' || condition === 'tornado') {
+      return "Severe Storm Buffer Active";
+    } else if (condition === 'rain' || condition === 'drizzle') {
+      return "Wet Roads / Rain Buffer";
+    } else if (condition === 'mist' || condition === 'fog' || condition === 'haze') {
+      return "Low Visibility Buffer";
+    }
+    
+    return "Nominal / Clear Skies";
+  } catch (error) {
+    console.error("Weather API offline or limit reached, falling back to nominal.");
+    return "API Offline (Nominal Fallback)";
+  }
+};
+
 function UserPortal() {
   const [shipment, setShipment] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -12,14 +47,17 @@ function UserPortal() {
   const [etaDate, setEtaDate] = useState('--');
   const [progressPct, setProgressPct] = useState(0);
   const [confidenceScore, setConfidenceScore] = useState('Calculating...');
+  const [weatherContext, setWeatherContext] = useState('Syncing Telemetry...');
   
   // Dark Mode State (Persists in localStorage)
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('admin_theme') === 'dark');
   
   const [prevMsgCount, setPrevMsgCount] = useState(0);
   const [showAiTooltip, setShowAiTooltip] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
 
   const chatEndRef = useRef(null);
+  const prevStatusRef = useRef(null);
   const navigate = useNavigate();
   const session = JSON.parse(localStorage.getItem('consignee_session'));
 
@@ -67,6 +105,23 @@ function UserPortal() {
 
       const sData = await sRes.json();
       const mData = await mRes.json();
+      
+      // LIVE DISPATCH & DELIVERY NOTIFIER ENGINE
+      if (prevStatusRef.current) {
+        if (prevStatusRef.current === 'Pending' && sData.status === 'Out for Delivery') {
+          new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => console.log("Audio blocked by browser"));
+          setToastMsg("🚀 Your cargo has been dispatched! Track its live telemetry now.");
+          setTimeout(() => setToastMsg(null), 8000);
+        } else if (prevStatusRef.current !== 'Done' && sData.status === 'Done') {
+          // Play custom sound from public folder
+          new Audio('/mixkit-bell-notification-933.wav').play().catch(() => console.log("Audio blocked by browser"));
+          setToastMsg("✅ Cargo successfully delivered! Secure handover complete.");
+          setTimeout(() => setToastMsg(null), 8000);
+        }
+      }
+      
+      prevStatusRef.current = sData.status;
+
       setShipment(sData);
       setMessages(mData);
     } catch (e) {
@@ -81,7 +136,14 @@ function UserPortal() {
     return () => clearInterval(timer);
   }, []);
 
-  // 2. LIVE PREDICTIVE AI ENGINE (Pessimistic P90 + Digital Twin Context)
+  // 2. FETCH LIVE WEATHER SENSOR DATA
+  useEffect(() => {
+    if (shipment) {
+      fetchLiveWeatherContext(shipment.latitude, shipment.longitude).then(setWeatherContext);
+    }
+  }, [shipment?.latitude, shipment?.longitude]);
+
+  // 3. LIVE PREDICTIVE AI ENGINE (Pessimistic P90 + Digital Twin Context)
   useEffect(() => {
     const timer = setInterval(() => {
       if (!shipment) return;
@@ -145,11 +207,11 @@ function UserPortal() {
           setProgressPct(5);
         }
       }
-    }, 1000);
+    }, 1000); 
     return () => clearInterval(timer);
   }, [shipment]);
 
-  // 3. COMMS ENGINE (Chat & Notifications)
+  // 4. COMMS ENGINE (Chat & Notifications)
   useEffect(() => {
     if (messages.length > prevMsgCount) {
       const lastMsg = messages[messages.length - 1];
@@ -191,7 +253,15 @@ function UserPortal() {
   return (
     <div style={{ background: t.bg, color: t.text1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', fontFamily: "'Inter', system-ui, sans-serif", transition: 'background 0.3s ease, color 0.3s ease' }}>
       
+      {/* FLOATING DISPATCH TOAST */}
+      {toastMsg && (
+        <div style={{ position: 'fixed', top: '24px', right: '50%', transform: 'translateX(50%)', background: toastMsg.includes('Delivered') ? '#10b981' : '#2563eb', color: 'white', padding: '16px 32px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', boxShadow: toastMsg.includes('Delivered') ? '0 10px 25px -5px rgba(16,185,129,0.4)' : '0 10px 25px -5px rgba(37,99,235,0.4)', zIndex: 9999, animation: 'slideDown 0.4s ease forwards' }}>
+          {toastMsg}
+        </div>
+      )}
+
       <style>{`
+        @keyframes slideDown { from { top: -50px; opacity: 0; } to { top: 24px; opacity: 1; } }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: ${t.border}; border-radius: 10px; }
@@ -233,7 +303,7 @@ function UserPortal() {
       <main className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '40px' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
           
-          {/* ✅ PORTAL FEATURES GUIDE */}
+          {/* PORTAL FEATURES GUIDE */}
           <div className="animate-up" style={{ marginBottom: '40px' }}>
             <h2 style={{ fontSize: '26px', fontWeight: '900', color: t.text1, margin: '0 0 8px 0', letterSpacing: '-0.5px' }}>
               Welcome, {session?.receiver_name}
@@ -307,6 +377,9 @@ function UserPortal() {
                         <span style={{ fontSize: '12px', lineHeight: '1.5', display: 'block', color: isDarkMode ? '#cbd5e1' : '#64748b' }}>
                           This ETA is simulated using a <strong>Pessimistic P90 Probabilistic Model</strong> via our Digital Twin. It analyzes real-time external streams (weather, traffic, port data) to forecast delivery securely.
                         </span>
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}`, fontSize: '11px', color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                          <strong style={{ color: t.text1 }}>Live Sensor:</strong> {weatherContext}
+                        </div>
                       </div>
                     )}
 
@@ -328,13 +401,17 @@ function UserPortal() {
                       </div>
                     )}
 
-                    {/* AI DIAGNOSTICS WIDGET (Context Layer Hidden) */}
+                    {/* AI DIAGNOSTICS WIDGET */}
                     {statusStep === 2 && (
                       <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
                         <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>◈ AI Telemetry Diagnostics</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
                           <span style={{ color: '#cbd5e1' }}>Confidence Score:</span>
                           <span style={{ fontWeight: '700', color: confidenceScore.includes('Low') ? '#ef4444' : confidenceScore.includes('Moderate') ? '#f59e0b' : '#10b981' }}>{confidenceScore}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                          <span style={{ color: '#cbd5e1' }}>Live Weather Layer:</span>
+                          <span style={{ fontWeight: '700', color: weatherContext.includes('Buffer') ? '#f59e0b' : '#38bdf8' }}>{weatherContext}</span>
                         </div>
                       </div>
                     )}
@@ -475,6 +552,152 @@ function UserPortal() {
                 </section>
 
               </div>
+
+              {/* ─── GOOGLE MAPS ROUTE SECTION ─────────────────────────────── */}
+              <section className="animate-up" style={{ animationDelay: '0.3s', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: t.text1 }}>Route Map</h3>
+                  <span style={{ background: statusStep === 2 ? 'rgba(37,99,235,0.12)' : t.accent, color: statusStep === 2 ? '#2563eb' : t.text2, padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {statusStep === 2 && <span className="pulse-dot" style={{ background: '#2563eb', boxShadow: '0 0 0 0 rgba(37,99,235,0.7)', width: '7px', height: '7px', borderRadius: '50%', display: 'inline-block' }}></span>}
+                    {statusStep === 3 ? 'ROUTE COMPLETED' : statusStep === 2 ? 'IN TRANSIT' : 'PENDING DISPATCH'}
+                  </span>
+                </div>
+
+                <div style={{ background: t.card, borderRadius: '16px', border: `1px solid ${t.border}`, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
+
+                  {/* Route Header: Origin → Destination */}
+                  <div style={{ padding: '20px 24px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'wrap' }}>
+                    
+                    {/* Origin */}
+                    <div style={{ flex: 1, minWidth: '180px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(37,99,235,0.12)', border: '2px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ color: '#2563eb', fontSize: '14px', fontWeight: '900' }}>G</span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: '800', color: t.text3, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '3px' }}>Origin</div>
+                        <div style={{ fontSize: '13px', fontWeight: '800', color: t.text1, lineHeight: '1.3' }}>GILFFC Global</div>
+                        <div style={{ fontSize: '12px', color: t.text2, marginTop: '1px' }}>Distribution Hub, Manila</div>
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: t.text3 }}>
+                      <div style={{ width: '60px', height: '2px', background: `linear-gradient(to right, #2563eb, ${statusStep === 3 ? '#10b981' : '#2563eb'})`, borderRadius: '2px', position: 'relative' }}>
+                        <div style={{ position: 'absolute', right: '-4px', top: '-4px', borderLeft: `8px solid ${statusStep === 3 ? '#10b981' : '#2563eb'}`, borderTop: '5px solid transparent', borderBottom: '5px solid transparent' }}></div>
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: t.text3, letterSpacing: '0.5px' }}>DRIVING</span>
+                    </div>
+
+                    {/* Destination */}
+                    <div style={{ flex: 1, minWidth: '180px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: statusStep === 3 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.1)', border: `2px solid ${statusStep === 3 ? '#10b981' : '#ef4444'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: '16px' }}>{statusStep === 3 ? '✓' : '📍'}</span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: '800', color: t.text3, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '3px' }}>Consignee</div>
+                        <div style={{ fontSize: '13px', fontWeight: '800', color: t.text1, lineHeight: '1.3' }}>{shipment.receiver_name}</div>
+                        <div style={{ fontSize: '12px', color: t.text2, marginTop: '1px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shipment.address}</div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Google Maps Embed */}
+                  <div style={{ position: 'relative', width: '100%', height: '380px', background: t.accent }}>
+                    {GOOGLE_MAPS_API_KEY !== 'AIzaSyDJvIQon878_VcstOhV-Z5IqDqerFZtIVA' ? (
+                      <iframe
+                        title="Route Map"
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0, display: 'block' }}
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={`https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_API_KEY}&origin=${encodeURIComponent(GILFFC_HUB_ADDRESS)}&destination=${encodeURIComponent(shipment.address)}&mode=driving`}
+                      />
+                    ) : (
+                      /* ── Placeholder when no API key is set ── */
+                      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', boxSizing: 'border-box' }}>
+                        {/* Stylized map placeholder */}
+                        <div style={{ position: 'relative', width: '100%', maxWidth: '420px', height: '220px', background: isDarkMode ? '#0f1f3d' : '#dbeafe', borderRadius: '12px', overflow: 'hidden', border: `1px solid ${t.border}` }}>
+                          {/* Grid lines */}
+                          {[...Array(6)].map((_, i) => (
+                            <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: `${i * 20}%`, height: '1px', background: isDarkMode ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.1)' }} />
+                          ))}
+                          {[...Array(8)].map((_, i) => (
+                            <div key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `${i * 14}%`, width: '1px', background: isDarkMode ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.1)' }} />
+                          ))}
+                          {/* Simulated road */}
+                          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} viewBox="0 0 420 220" preserveAspectRatio="none">
+                            <path d="M 30 110 Q 100 60, 180 100 Q 260 140, 340 80 L 395 70" stroke={isDarkMode ? '#3b82f6' : '#2563eb'} strokeWidth="4" fill="none" strokeDasharray="none" strokeLinecap="round"/>
+                            <path d="M 30 110 Q 120 150, 220 130 Q 300 115, 395 70" stroke={isDarkMode ? '#475569' : '#94a3b8'} strokeWidth="3" fill="none" strokeDasharray="8,6" strokeLinecap="round"/>
+                          </svg>
+                          {/* Origin dot */}
+                          <div style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', width: '18px', height: '18px', borderRadius: '50%', background: '#2563eb', border: '3px solid white', boxShadow: '0 0 0 3px rgba(37,99,235,0.3)' }} />
+                          {/* Destination pin */}
+                          <div style={{ position: 'absolute', right: '10px', top: '24px' }}>
+                            <div style={{ width: '22px', height: '28px', background: '#ef4444', borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)', border: '2px solid white', boxShadow: '0 2px 8px rgba(239,68,68,0.4)' }} />
+                          </div>
+                          {/* Route info card */}
+                          <div style={{ position: 'absolute', top: '8px', left: '8px', background: isDarkMode ? 'rgba(15,23,42,0.9)' : 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '900', color: t.text1 }}>🚗 Live Route</div>
+                            <div style={{ fontSize: '11px', color: t.text2, marginTop: '2px' }}>GILFFC Hub → Consignee</div>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: t.text1, marginBottom: '6px' }}>Google Maps API Key Required</div>
+                          <div style={{ fontSize: '12px', color: t.text2, lineHeight: '1.6', maxWidth: '360px' }}>
+                            Set <code style={{ background: t.accent, padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '11px', color: '#2563eb' }}>GOOGLE_MAPS_API_KEY</code> at the top of <code style={{ background: t.accent, padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '11px', color: '#2563eb' }}>UserPortal.jsx</code> to activate the live route map.
+                          </div>
+                          <a
+                            href={`https://www.google.com/maps/dir/${encodeURIComponent(GILFFC_HUB_ADDRESS)}/${encodeURIComponent(shipment.address)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '12px', background: '#2563eb', color: 'white', padding: '10px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', textDecoration: 'none', boxShadow: '0 4px 12px rgba(37,99,235,0.3)' }}
+                          >
+                            <span>🗺️</span> Open Route in Google Maps
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status overlay badge on map */}
+                    {GOOGLE_MAPS_API_KEY !== 'AIzaSyDJvIQon878_VcstOhV-Z5IqDqerFZtIVA' && (
+                      <div style={{ position: 'absolute', top: '12px', left: '12px', background: statusStep === 3 ? '#10b981' : statusStep === 2 ? '#2563eb' : '#f59e0b', color: 'white', padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '800', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 5 }}>
+                        {statusStep === 3 ? 'Delivered' : statusStep === 2 ? 'In Transit' : 'Pending'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Route Action Footer */}
+                  <div style={{ padding: '16px 24px', borderTop: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '20px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: t.text3, textTransform: 'uppercase', letterSpacing: '1px' }}>From</span>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: t.text2, marginTop: '2px' }}>GILFFC Hub, Manila</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: t.text3, textTransform: 'uppercase', letterSpacing: '1px' }}>To</span>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: t.text2, marginTop: '2px', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shipment.address}</span>
+                      </div>
+                    </div>
+                    <a
+                      href={`https://www.google.com/maps/dir/${encodeURIComponent(GILFFC_HUB_ADDRESS)}/${encodeURIComponent(shipment.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: t.accent, color: t.text1, padding: '10px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', textDecoration: 'none', border: `1px solid ${t.border}`, transition: 'all 0.2s' }}
+                      onMouseOver={e => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#2563eb'; }}
+                      onMouseOut={e => { e.currentTarget.style.background = t.accent; e.currentTarget.style.color = t.text1; e.currentTarget.style.borderColor = t.border; }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                      Open in Google Maps
+                    </a>
+                  </div>
+
+                </div>
+              </section>
+              {/* ─────────────────────────────────────────────────────────── */}
+
             </div>
 
             {/* RIGHT COLUMN: ZENDESK-STYLE SUPPORT WIDGET */}
@@ -486,7 +709,6 @@ function UserPortal() {
                   <div style={{ width: '48px', height: '48px', background: 'rgba(255,255,255,0.1)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '18px' }}>
                     HQ
                   </div>
-                  <div style={{ position: 'absolute', bottom: '-4px', right: '-4px', width: '14px', height: '14px', background: '#10b981', borderRadius: '50%', border: '3px solid #0f172a' }}></div>
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Live Agent Support</h3>

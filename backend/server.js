@@ -136,7 +136,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// ✅ ADDED: Secure Password Reset Endpoint
+// ADDED: Secure Password Reset Endpoint
 app.post('/api/auth/reset-password', async (req, res) => {
   const { email, newPassword } = req.body;
   try {
@@ -250,7 +250,7 @@ app.delete('/api/deliveries/:id', (req, res) => {
   });
 });
 
-// ✅ ADDED: Bulk Data Wipe Endpoint (Danger Zone)
+// ADDED: Bulk Data Wipe Endpoint (Danger Zone)
 app.post('/api/deliveries/bulk-delete', (req, res) => {
   if (req.body.ids === 'ALL_WIPE_COMMAND') {
     db.query('DELETE FROM deliveries', (err) => {
@@ -346,7 +346,7 @@ app.delete('/api/fleet/:id', (req, res) => {
 /* 4. CLIENT INTERFACE (USER PORTAL)                                           */
 /* -------------------------------------------------------------------------- */
 
-// ✅ Public Tracking Verification via POST
+// Public Tracking Verification via POST
 app.post('/api/user/verify', (req, res) => {
   const { tracking_number, receiver_name } = req.body;
   
@@ -372,7 +372,7 @@ app.post('/api/user/verify', (req, res) => {
   });
 });
 
-// ✅ Public Tracking Verification via GET (Standardized for Leading Zeros)
+// Public Tracking Verification via GET (Standardized for Leading Zeros)
 app.get('/api/user/track', (req, res) => {
   const { id, name } = req.query;
 
@@ -420,7 +420,7 @@ app.get('/api/user/shipment/:id', (req, res) => {
   });
 });
 
-// ✅ SUPREME DEBUG TRENDS ENDPOINT (Updated to fix ONLY_FULL_GROUP_BY)
+// SUPREME DEBUG TRENDS ENDPOINT (Updated to fix ONLY_FULL_GROUP_BY)
 app.get('/api/analytics/trends', (req, res) => {
   console.log("📊 ANALYTICS TRENDS REQUEST RECEIVED");
   
@@ -444,7 +444,7 @@ app.get('/api/analytics/trends', (req, res) => {
   });
 });
 
-// ✅ ADDED: Fetch Global Team Roster
+// ADDED: Fetch Global Team Roster
 app.get('/api/users', (req, res) => {
   const q = 'SELECT user_id, full_name, email, role FROM users ORDER BY user_id DESC';
   db.query(q, (err, results) => {
@@ -456,7 +456,7 @@ app.get('/api/users', (req, res) => {
   });
 });
 
-// ✅ ADDED: Fetch Specific Operative Profile
+// ADDED: Fetch Specific Operative Profile
 app.get('/api/user/profile/:id', (req, res) => {
   const q = 'SELECT user_id, full_name, email, role FROM users WHERE user_id = ?';
   db.query(q, [req.params.id], (err, results) => {
@@ -465,7 +465,7 @@ app.get('/api/user/profile/:id', (req, res) => {
   });
 });
 
-// ✅ ADDED: Update Operative Profile Details
+// ADDED: Update Operative Profile Details
 app.put('/api/user/profile/:id', (req, res) => {
   const { full_name, email } = req.body;
   const q = 'UPDATE users SET full_name = ?, email = ? WHERE user_id = ?';
@@ -479,7 +479,7 @@ app.put('/api/user/profile/:id', (req, res) => {
   });
 });
 
-// ✅ NEW: Global Comms Fetch (For Customer Service Terminal sync)
+// NEW: Global Comms Fetch (For Customer Service Terminal sync)
 app.get('/api/messages', (req, res) => {
   const q = 'SELECT * FROM messages ORDER BY timestamp ASC';
   
@@ -502,7 +502,7 @@ app.get('/api/messages/:deliveryId', (req, res) => {
   });
 });
 
-// ✅ NEW: Mark messages as read (clears notifications/badges)
+// NEW: Mark messages as read (clears notifications/badges)
 app.put('/api/messages/read/:deliveryId', (req, res) => {
   const { deliveryId } = req.params;
   const { role } = req.body; // 'Admin' or 'User'

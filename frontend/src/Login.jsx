@@ -149,10 +149,6 @@ function Login() {
         <div style={{ position: 'absolute', top: '-20%', left: '-10%', width: '80%', height: '80%', background: 'radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 60%)', pointerEvents: 'none' }}></div>
         
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ width: '64px', height: '64px', background: 'white', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '32px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-            <img src="/gilffc-logo-globe.png" alt="GILFFC" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
-          </div>
-          
           <h1 style={{ fontSize: '48px', fontWeight: '900', letterSpacing: '-1px', margin: '0 0 16px 0', lineHeight: '1.1' }}>
             GILFFC <br/> Logistics OS
           </h1>
